@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#05070f" />
+  <title>NEON OVERDRIVE // San Francisco 2088</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2305070f'/><path d='M6 21h20l-3 4H9z' fill='%235ffbf1'/><path d='M10 16h12l2 4H8z' fill='%23ff2fb9'/><circle cx='11' cy='25' r='2' fill='%23ffd58a'/><circle cx='21' cy='25' r='2' fill='%23ffd58a'/></svg>" />
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+    <div class="vignette" id="vignette"></div>
+    <div class="scanlines"></div>
+
+    <div id="hud" class="hidden">
+      <header class="hud-top">
+        <div class="hud-left panel">
+          <div class="eyebrow">RUN SCORE</div>
+          <div id="score" class="score">0</div>
+          <div class="subrow">
+            <span>BEST <b id="best">0</b></span>
+            <span>DIST <b id="distance">0</b> M</span>
+          </div>
+          <div id="comboWrap" class="combo hidden">
+            <span id="comboVal">x1.0</span>
+            <div class="comboBar"><i id="comboFill"></i></div>
+            <span id="comboTag">COMBO</span>
+          </div>
+        </div>
+
+        <div class="hud-center">
+          <div class="districtWrap">
+            <span class="eyebrow">DISTRICT // GRID 7</span>
+            <div id="district" class="district">SOMA</div>
+          </div>
+          <div class="heatRow">
+            <span class="heatLabel">SFPD HEAT</span>
+            <div id="heatStars" class="stars"></div>
+          </div>
+          <div id="alertBanner" class="alertBanner">
+            <b id="alertTitle">ROADBLOCK AHEAD</b>
+            <span id="alertSub">JUMP IT OR SHOOT THROUGH</span>
+          </div>
+        </div>
+
+        <div class="hud-right">
+          <div class="minimapFrame">
+            <canvas id="minimap" width="300" height="300"></canvas>
+            <div class="minimapSweep"></div>
+            <span class="mmLabel">SF GRID // LIVE</span>
+            <span class="mmCorner tl"></span><span class="mmCorner tr"></span>
+            <span class="mmCorner bl"></span><span class="mmCorner br"></span>
+          </div>
+          <div class="timerRow">
+            <span id="timer">00:00</span>
+            <span class="dispatch"><i></i> SFPD DISPATCH</span>
+          </div>
+        </div>
+      </header>
+
+      <div id="radio" class="radio">
+        <span class="radioTag">◉ SFPD</span>
+        <span id="radioText">ALL UNITS — SUSPECT VEHICLE SPOTTED</span>
+      </div>
+
+      <div id="toasts" class="toasts"></div>
+      <div id="killFeed" class="killfeed"></div>
+
+      <div id="crosshair" class="crosshair">
+        <span class="chDot"></span>
+        <i class="chTop"></i><i class="chBottom"></i><i class="chLeft"></i><i class="chRight"></i>
+        <span class="chRing"></span>
+      </div>
+
+      <footer class="hud-bottom">
+        <div class="statusBlock panel">
+          <div class="panelTitle"><span>VEHICLE STATUS</span><span class="tech">ROADSTER 2 // MK.II</span></div>
+          <div class="barRow">
+            <span class="barLabel">INTEGRITY</span>
+            <div class="bar hp"><i id="hpFill"></i></div>
+            <b id="hpVal">100</b>
+          </div>
+          <div class="barRow">
+            <span class="barLabel">SHIELD</span>
+            <div class="bar shield"><i id="shieldFill"></i></div>
+            <b id="shieldVal">0</b>
+          </div>
+          <div class="barRow turboBarRow">
+            <span class="barLabel">TURBO</span>
+            <div class="bar turbo"><i id="turboFill"></i></div>
+            <b id="turboVal">65</b>
+          </div>
+          <div class="abilityRow">
+            <span class="ability" id="abilityJump"><kbd>SPACE</kbd> AIR JUMP <em>−26</em></span>
+            <span class="ability" id="abilityBoost"><kbd>SHIFT</kbd> REAR BOOST <em>−27/s</em></span>
+            <span class="ability" id="abilityDrift"><kbd>C</kbd> DRIFT <em>+FUEL</em></span>
+          </div>
+        </div>
+
+        <div class="weaponBlock panel">
+          <div class="weaponHead">
+            <span class="eyebrow">ARMAMENT</span>
+            <span id="weaponSlots" class="weaponSlots"></span>
+          </div>
+          <div id="weaponName" class="weaponName">VOLT SMG</div>
+          <div class="ammoRow">
+            <span id="ammoVal" class="ammoVal">45</span>
+            <span class="ammoLabel">ROUNDS</span>
+            <span class="switchHint">Q / WHEEL SWITCH</span>
+          </div>
+        </div>
+
+        <div class="speedBlock panel">
+          <div class="speedVal"><span id="speedVal">000</span><small>KM/H</small></div>
+          <div class="speedBar"><i id="speedFill"></i></div>
+          <div class="speedSub"><span id="gearLabel">D</span><span>TESLA ROADSTER 2</span></div>
+        </div>
+      </footer>
+
+      <div id="damageVignette" class="damageVignette"></div>
+      <div id="wantedFlash" class="wantedFlash"></div>
+      <div id="muteBadge" class="muteBadge hidden">AUDIO MUTED // M</div>
+      <div class="hintBar">
+        <span><kbd>WASD</kbd> DRIVE</span>
+        <span><kbd>SHIFT</kbd> BOOST</span>
+        <span><kbd>SPACE</kbd> JUMP</span>
+        <span><kbd>C</kbd> DRIFT</span>
+        <span><kbd>LMB / J</kbd> FIRE</span>
+        <span><kbd>Q</kbd> WEAPON</span>
+        <span><kbd>ESC</kbd> PAUSE</span>
+      </div>
+    </div>
+
+    <div id="menu" class="overlay menu">
+      <div class="menuGrid" aria-hidden="true"></div>
+      <div class="menuInner">
+        <div class="menuTop">
+          <div class="brandLine"><i></i> NIGHTCITY MOTORSPORT DIVISION <i></i></div>
+          <h1 class="title"><span class="titleSmall">NEON</span><span class="titleBig" data-text="OVERDRIVE">OVERDRIVE</span></h1>
+          <div class="subtitle">SAN FRANCISCO <span>//</span> 2088</div>
+          <p class="lede">A stolen <b>Tesla Roadster 2</b>. Sixteen districts of neon-soaked asphalt. Every cruiser in the city is carrying.
+            Drift to refill your turbo, punch the rear jets, and air-jump the barricades before the SFPD closes the grid.</p>
+        </div>
+
+        <div class="menuFeatures">
+          <span>DUAL TURBO // AIR-JUMP + REAR BOOST</span>
+          <span>PROCEDURAL CYBER-SF</span>
+          <span>5 SALVAGE WEAPONS</span>
+          <span>ESCALATING HEAT</span>
+        </div>
+
+        <div class="menuBody">
+          <div class="controlCard">
+            <h3>CONTROLS</h3>
+            <div class="controlGrid">
+              <div><kbd>W A S D</kbd><span>THROTTLE / STEER</span></div>
+              <div><kbd>SHIFT</kbd><span>REAR TURBO</span></div>
+              <div><kbd>SPACE</kbd><span>AIR TURBO JUMP</span></div>
+              <div><kbd>C</kbd><span>HANDBRAKE DRIFT</span></div>
+              <div><kbd>MOUSE / J</kbd><span>AIM &amp; FIRE</span></div>
+              <div><kbd>Q / WHEEL</kbd><span>SWAP WEAPON</span></div>
+              <div><kbd>M</kbd><span>AUDIO MUTE</span></div>
+              <div><kbd>ESC</kbd><span>PAUSE</span></div>
+            </div>
+            <div class="turboNote">
+              <div><b>SPACE</b> compressed air under the chassis — clears cars, roadblocks and spike strips.</div>
+              <div><b>SHIFT</b> rear jet — enormous acceleration, burns turbo fast.</div>
+              <div>Both burn the same reservoir. Fuel it by driving, drifting, near-misses and air time.</div>
+            </div>
+          </div>
+
+          <div class="launchCard">
+            <div class="bestLine">PERSONAL BEST <b id="menuBest">0</b></div>
+            <button id="startBtn" class="startBtn"><span>INITIATE RUN</span><i>→</i></button>
+            <div class="enterHint">PRESS <kbd>ENTER</kbd> OR CLICK ANYWHERE</div>
+            <div class="legal">SFPD SURVEILLANCE NOTICE: THIS SIMULATION IS FICTIONAL. DRIVE IRRESPONSIBLY.</div>
+          </div>
+        </div>
+
+        <div class="menuFoot">
+          <span>BUILD 1.0 // WEBGL-FREE 2.5D</span>
+          <span>AUDIO SYNTHESISED IN-BROWSER</span>
+          <span>NO ASSETS // ALL PROCEDURAL</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="pause" class="overlay compact hidden">
+      <div class="modal">
+        <div class="eyebrow">SYSTEM // HALT</div>
+        <h2>PAUSED</h2>
+        <p>SFPD response suspended. For now.</p>
+        <div class="modalBtns">
+          <button id="resumeBtn" class="btn primary">RESUME <kbd>ESC</kbd></button>
+          <button id="restartBtn2" class="btn">RESTART</button>
+          <button id="menuBtn" class="btn">MAIN MENU</button>
+        </div>
+        <div class="pauseStats">
+          <span>SCORE <b id="pauseScore">0</b></span>
+          <span>HEAT <b id="pauseHeat">1</b></span>
+          <span>DIST <b id="pauseDist">0</b> M</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="gameover" class="overlay compact hidden">
+      <div class="modal gameoverModal">
+        <div class="eyebrow dangerText">SIGNAL LOST // CHASSIS CRITICAL</div>
+        <h2 class="wrecked">WRECKED</h2>
+        <div id="newBest" class="newBest hidden">NEW PERSONAL BEST</div>
+        <div class="resultScore"><span>FINAL SCORE</span><b id="finalScore">0</b></div>
+        <div class="resultGrid">
+          <div><span>DISTANCE</span><b id="finalDistance">0 m</b></div>
+          <div><span>TOP SPEED</span><b id="finalSpeed">0 km/h</b></div>
+          <div><span>CRUISERS DOWN</span><b id="finalKills">0</b></div>
+          <div><span>BEST COMBO</span><b id="finalCombo">x1.0</b></div>
+          <div><span>SURVIVED</span><b id="finalTime">00:00</b></div>
+          <div><span>HEAT REACHED</span><b id="finalHeat">★</b></div>
+        </div>
+        <div class="modalBtns">
+          <button id="restartBtn" class="btn primary">RUN IT AGAIN <kbd>R</kbd></button>
+          <button id="menuBtn2" class="btn">MAIN MENU</button>
+        </div>
+        <div class="bestLine small">PERSONAL BEST <b id="finalBest">0</b></div>
+      </div>
+    </div>
+
+    <div id="loading" class="loading">
+      <div class="loadTitle">NEON OVERDRIVE</div>
+      <div class="loadBar"><i></i></div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
