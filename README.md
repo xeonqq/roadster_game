@@ -35,7 +35,7 @@ Alternatively, serve the directory with any static server (the game is just `ind
 ## Features
 
 - **Two turbo abilities** fed by one shared reservoir:
-  - **Air jump** — 26 turbo, clears roadblock barriers, spikes and traffic; more air time earns bonus score and turbo.
+  - **Air jump** — 26 turbo, clears roadblock barriers, spikes and traffic; the Roadster pulls a full 360 flip, and a clean landing earns bonus score, combo and turbo.
   - **Rear boost** — 27 turbo/sec, pushes the Roadster toward 340 km/h with jet flames, speed lines and camera FOV.
   - Turbo is recharged by distance driven, drifting, near misses, ramps, air time and turbo-cell pickups.
 - **Escalating police pursuit** — interceptors, fast pursuit cruisers that ram, heavy riot SUVs and surveillance drones. Heat raises spawn rates, aggression, roadblocks and eventually a searchlight helicopter.

@@ -78,7 +78,7 @@ export class Renderer {
     this.canvas.style.width = w + 'px';
     this.canvas.style.height = h + 'px';
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.baseZoom = clamp(Math.max(w / 224, h / 142), 4.6, 10.5);
+    this.baseZoom = clamp(Math.max(w / 260, h / 165), 4.2, 9.4);
     if (initial) this.cam.zoom = this.baseZoom;
     this.rain = [];
     for (let i = 0; i < 190; i++) {
@@ -164,14 +164,16 @@ export class Renderer {
       targetZoom = this.baseZoom * 0.9;
     } else {
       const speed = Math.hypot(p.vx, p.vy);
-      const look = clamp(speed * 0.18, 0, 10);
-      targetX = p.x + (speed > 1 ? (p.vx / speed) * look : 0);
-      targetY = p.y + (speed > 1 ? (p.vy / speed) * look : 0);
+      const dir = p.forwardSpeed < -0.5 ? -1 : 1;
+      // look down the road, not just at the car
+      const look = clamp(7 + speed * 0.3, 7, 26);
+      targetX = p.x + Math.cos(p.heading) * look * dir + (speed > 1 ? (p.vx / speed) * 3 : 0);
+      targetY = p.y + Math.sin(p.heading) * look * dir + (speed > 1 ? (p.vy / speed) * 3 : 0);
       // subtle look toward the cursor
       const m = game.input.mouse;
-      targetX += clamp((m.x - this.width / 2) / this.width, -0.5, 0.5) * 7;
-      targetY += clamp((m.y - this.height / 2) / this.height, -0.5, 0.5) * 5;
-      targetZoom = this.baseZoom * (1 - clamp(speed / 120, 0, 0.16) - (p.boosting ? 0.06 : 0));
+      targetX += clamp((m.x - this.width / 2) / this.width, -0.5, 0.5) * 4;
+      targetY += clamp((m.y - this.height / 2) / this.height, -0.5, 0.5) * 3;
+      targetZoom = this.baseZoom * (1 - clamp(speed / 135, 0, 0.2) - (p.boosting ? 0.05 : 0));
       if (game.state === 'dying') targetZoom *= 0.94;
     }
     this.cam.x = damp(this.cam.x, targetX, 6.8, dt);
@@ -184,7 +186,7 @@ export class Renderer {
     this.shakeY = (Math.random() * 2 - 1) * this.shakeMag;
 
     this.ox = this.width / 2 - (this.cam.x - this.cam.y) * this.cam.zoom;
-    this.oy = this.height * 0.52 - (this.cam.x + this.cam.y) * 0.5 * this.cam.zoom;
+    this.oy = this.height * 0.55 - (this.cam.x + this.cam.y) * 0.5 * this.cam.zoom;
   }
 
   visibleWorld() {
@@ -204,7 +206,7 @@ export class Renderer {
     const ctx = this.ctx;
     this.updateCamera(dt, game);
     this.ox = this.width / 2 - (this.cam.x - this.cam.y) * this.cam.zoom;
-    this.oy = this.height * 0.52 - (this.cam.x + this.cam.y) * 0.5 * this.cam.zoom;
+    this.oy = this.height * 0.55 - (this.cam.x + this.cam.y) * 0.5 * this.cam.zoom;
 
     // base sky / asphalt
     const bg = ctx.createLinearGradient(0, 0, 0, this.height);
@@ -540,7 +542,7 @@ export class Renderer {
     for (const block of blocks) {
       for (const b of block.buildings) {
         const s = this.worldToScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
-        const hpx = b.h * this.cam.zoom * 0.6;
+        const hpx = b.h * this.cam.zoom * 0.48;
         if (!visible(s.x, s.y - hpx, 160) && !visible(s.x, s.y, 160)) continue;
         items.push({ kind: b.style === 'pyramid' ? 'pyramid' : 'building', b, depth: b.x1 + b.y1 });
       }
@@ -596,7 +598,7 @@ export class Renderer {
   drawBuilding(b, game) {
     const ctx = this.ctx;
     const z = this.cam.zoom;
-    const hpx = b.h * z * 0.6;
+    const hpx = b.h * z * 0.48;
     const A = this.worldToScreen(b.x0, b.y0);
     const B = this.worldToScreen(b.x1, b.y0);
     const C = this.worldToScreen(b.x1, b.y1);
@@ -624,16 +626,16 @@ export class Renderer {
 
     // roof
     poly(ctx, [[top.A.x, top.A.y], [top.B.x, top.B.y], [top.C.x, top.C.y], [top.D.x, top.D.y]]);
-    ctx.fillStyle = '#101726';
+    ctx.fillStyle = '#0b111c';
     ctx.fill();
-    ctx.strokeStyle = rgba(b.accent, 0.28);
+    ctx.strokeStyle = rgba(b.accent, 0.2);
     ctx.lineWidth = 1;
     ctx.stroke();
 
     // roof neon rim on visible edges
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = rgba(b.accent, 0.5);
+    ctx.strokeStyle = rgba(b.accent, 0.34);
     ctx.lineWidth = 1.3;
     ctx.beginPath();
     ctx.moveTo(top.B.x, top.B.y);
@@ -659,7 +661,7 @@ export class Renderer {
       const c = this.worldToScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.h);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = rgba(b.accent, 0.55);
+      ctx.strokeStyle = rgba(b.accent, 0.4);
       ctx.lineWidth = 2;
       for (let i = 0; i < 3; i++) {
         const yy = c.y - 4 - i * 6;
@@ -707,7 +709,7 @@ export class Renderer {
     const p = game.player;
     if (b.x1 + b.y1 <= p.x + p.y + 0.4) return false;
     const s = this.worldToScreen(p.x, p.y, Math.min(1.4, (p.z || 0) + 1.1));
-    const hpx = b.h * this.cam.zoom * 0.6;
+    const hpx = b.h * this.cam.zoom * 0.48;
     const A = this.worldToScreen(b.x0, b.y0);
     const B = this.worldToScreen(b.x1, b.y0);
     const C = this.worldToScreen(b.x1, b.y1);
@@ -726,12 +728,12 @@ export class Renderer {
       [p2.x, p2.y - hpx], [p1.x, p1.y - hpx],
     ]);
     const g = ctx.createLinearGradient(0, p1.y - hpx, 0, p1.y);
-    g.addColorStop(0, shade(b.baseColor, isLeft ? 0.1 : 0.17));
-    g.addColorStop(1, shade(b.baseColor, -0.005));
+    g.addColorStop(0, shade(b.baseColor, isLeft ? 0.055 : 0.1));
+    g.addColorStop(1, shade(b.baseColor, -0.03));
     ctx.fillStyle = g;
     ctx.fill();
     if (isLeft) {
-      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.fill();
     }
 
@@ -752,7 +754,7 @@ export class Renderer {
         const lit = win.lit[idx];
         if (!lit) continue;
         const color = WIN_PALETTE[win.colors[idx] % WIN_PALETTE.length];
-        ctx.globalAlpha = (lit === 2 ? 0.9 : 0.48) * ga;
+        ctx.globalAlpha = (lit === 2 ? 0.52 : 0.26) * ga;
         if (color !== lastColor) { ctx.fillStyle = color; lastColor = color; }
         const wu = stepU * 0.55;
         const hv = stepV * 0.42;
@@ -781,7 +783,7 @@ export class Renderer {
     // edge trim
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const edgeColor = rgba(b.accent, 0.22);
+    const edgeColor = rgba(b.accent, 0.13);
     ctx.strokeStyle = edgeColor;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -796,7 +798,7 @@ export class Renderer {
     const sy = Math.max(p1.y, p2.y);
     const sg = ctx.createLinearGradient(0, sy - 20, 0, sy);
     sg.addColorStop(0, 'rgba(0,0,0,0)');
-    sg.addColorStop(1, rgba(b.accent, 0.08));
+    sg.addColorStop(1, rgba(b.accent, 0.04));
     ctx.fillStyle = sg;
     ctx.fillRect(Math.min(p1.x, p2.x) - 2, sy - 20, Math.abs(p2.x - p1.x) + 4, 20);
     ctx.restore();
@@ -816,14 +818,14 @@ export class Renderer {
       py = Math.max(face[0].y, face[1].y) - hpx * 0.62;
     }
     const big = s.type === 'billboard' ? 1.5 : 1;
-    const wpan = Math.min(140, (b.x1 - b.x0) * this.cam.zoom * 0.75) * big;
-    const hpan = 20 * big;
+    const wpan = Math.min(120, (b.x1 - b.x0) * this.cam.zoom * 0.68) * big;
+    const hpan = 18 * big;
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(-0.035);
     ctx.transform(1, 0.09, -0.13, 0.92, 0, 0);
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = 'rgba(5,8,16,0.88)';
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = 'rgba(5,8,16,0.9)';
     ctx.fillRect(-wpan / 2, -hpan / 2, wpan, hpan);
     ctx.strokeStyle = s.color;
     ctx.lineWidth = 1.2;
@@ -843,7 +845,7 @@ export class Renderer {
   drawPyramid(b, game) {
     const ctx = this.ctx;
     const z = this.cam.zoom;
-    const hpx = b.h * z * 0.6;
+    const hpx = b.h * z * 0.48;
     const A = this.worldToScreen(b.x0, b.y0);
     const B = this.worldToScreen(b.x1, b.y0);
     const C = this.worldToScreen(b.x1, b.y1);
@@ -1150,12 +1152,13 @@ export class Renderer {
     return { sx: s.x, sy: s.y - lift * zz, aX, aY, bX, bY };
   }
 
-  carSpace(car, lift, fn) {
+  carSpace(car, lift, fn, spin = 0) {
     const ctx = this.ctx;
     const b = this.carBasis(car.x, car.y, car.heading, car.z || 0, lift);
     ctx.save();
     ctx.translate(b.sx, b.sy);
     ctx.transform(b.bX, b.bY, b.aX, b.aY, 0, 0);
+    if (spin) ctx.rotate(spin);
     fn(b);
     ctx.restore();
   }
@@ -1185,9 +1188,10 @@ export class Renderer {
   drawCarSprite(o) {
     const ctx = this.ctx;
     const pal = o.palette;
-    const k = o.kind === 'player' ? 1.28 : 1.12;
+    const k = o.kind === 'player' ? 1.58 : 1.12;
     const w = 2.15 * k, l = 4.7 * k;
     const z = o.z || 0;
+    const spin = o.kind === 'player' ? (o.flipAngle || 0) : 0;
     this.drawCarShadow(o, w, l);
 
     // underglow
@@ -1340,7 +1344,7 @@ export class Renderer {
         ctx.lineTo(w * 0.36, l * 0.5);
         ctx.stroke();
       }
-    });
+    }, spin);
 
     // raised roof volume
     this.carSpace(o, 0.42, () => {
@@ -1374,7 +1378,7 @@ export class Renderer {
         ctx.ellipse(-w * 0.06, 0.05, w * 0.13, l * 0.1, -0.2, 0, TAU);
         ctx.fill();
       }
-    });
+    }, spin);
 
     if (o.kind === 'cop') {
       // light bar
@@ -1414,7 +1418,7 @@ export class Renderer {
           ctx.fill();
         }
         ctx.restore();
-      });
+      }, spin);
     }
 
     if (o.kind === 'wreck') {
@@ -1453,11 +1457,28 @@ export class Renderer {
       },
       kind: 'player', boosting: p.boosting, boostIntensity: p.boostIntensity,
       braking: game.input.isDown('back'), invuln: p.invuln,
+      flipAngle: p.flipAngle,
     });
 
+    // flip trail arcs while the car is tumbling
+    if (p.airborne && p.flipAngle > 0.01) {
+      const s = this.worldToScreen(p.x, p.y, p.z);
+      const fade = clamp(1 - p.flipAngle / TAU, 0, 1);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(143,252,255,${0.35 * fade + 0.12})`;
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y, 20 + i * 7, 11 + i * 4, p.flipAngle * 0.5, p.flipAngle + i * 1.4, p.flipAngle + i * 1.4 + 1.1);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // player selection brackets — keep the hero car readable over the neon city
-    const bw = 2.15 * 1.28 * 0.6, bl = 4.7 * 1.28 * 0.56;
-    const pulse = 0.42 + Math.sin(this.time * 4.5) * 0.1;
+    const bw = 2.15 * 1.58 * 0.6, bl = 4.7 * 1.58 * 0.56;
+    const pulse = 0.5 + Math.sin(this.time * 4.5) * 0.1;
     this.carSpace({ x: p.x, y: p.y, heading: p.heading, z: p.z || 0 }, 0.06, () => {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';

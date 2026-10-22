@@ -22,10 +22,10 @@ export const PLAYER = {
   maxSpeed: 62,
   boostSpeed: 96,
   boostAccel: 70,
-  grip: 7.0,
-  driftGrip: 0.75,
-  handbrakeGrip: 0.5,
-  steerRate: 2.6,
+  grip: 8.6,
+  driftGrip: 2.2,
+  handbrakeGrip: 1.2,
+  steerRate: 2.25,
   airSteer: 1.6,
   gravity: 25,
   jumpVel: 17,
@@ -68,23 +68,23 @@ export const WEAPON_ORDER = ['smg', 'shotgun', 'rocket', 'rail', 'emp'];
 
 export const COP = {
   interceptor: {
-    name: 'SFPD INTERCEPTOR', health: 30, maxSpeed: 60, accel: 38,
-    turn: 2.5, fireRate: 1.35, damage: 4, range: 105, accuracy: 0.11,
+    name: 'SFPD INTERCEPTOR', health: 30, maxSpeed: 46, accel: 30,
+    turn: 2.2, fireRate: 1.6, damage: 3.2, range: 92, accuracy: 0.085,
     score: 130, radius: 2.5, color: '#e8eef7',
   },
   heavy: {
-    name: 'SFPD RIOT SUV', health: 95, maxSpeed: 50, accel: 30,
-    turn: 1.75, fireRate: 2.1, damage: 7, range: 92, accuracy: 0.15,
+    name: 'SFPD RIOT SUV', health: 95, maxSpeed: 40, accel: 24,
+    turn: 1.55, fireRate: 2.4, damage: 5.5, range: 80, accuracy: 0.11,
     score: 240, radius: 2.9, color: '#c9d4e6',
   },
   rammer: {
-    name: 'SFPD PURSUIT', health: 55, maxSpeed: 69, accel: 46,
-    turn: 2.8, fireRate: 2.8, damage: 5, range: 70, accuracy: 0.2,
+    name: 'SFPD PURSUIT', health: 55, maxSpeed: 52, accel: 34,
+    turn: 2.4, fireRate: 3.0, damage: 4, range: 60, accuracy: 0.14,
     score: 180, radius: 2.5, color: '#ffd9df',
   },
   drone: {
-    name: 'SURVEILLANCE DRONE', health: 22, maxSpeed: 68, accel: 54,
-    turn: 3.2, fireRate: 1.0, damage: 3, range: 120, accuracy: 0.1,
+    name: 'SURVEILLANCE DRONE', health: 22, maxSpeed: 54, accel: 40,
+    turn: 2.8, fireRate: 1.15, damage: 2.4, range: 100, accuracy: 0.08,
     score: 90, radius: 1.6, color: '#aab6c9', flying: true,
   },
 };

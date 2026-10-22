@@ -86,17 +86,17 @@ export class PoliceForce {
     const heat = game.heat;
 
     // ── spawning ───────────────────────────────────────────────────────
-    const targetCops = clamp(2 + Math.floor(heat * 1.7), 2, 13);
+    const targetCops = clamp(1 + Math.floor(heat * 1.2), 1, 9);
     this.spawnTimer -= dt;
     if (this.cops.length < targetCops && this.spawnTimer <= 0) {
       const spawned = this.spawnCop(game, pickType(heat));
-      this.spawnTimer = spawned ? Math.max(0.75, 3.1 - heat * 0.32) : 0.6;
+      this.spawnTimer = spawned ? Math.max(0.9, 3.8 - heat * 0.32) : 0.7;
     }
 
     this.roadblockTimer -= dt;
     if (heat >= 1.2 && this.roadblockTimer <= 0) {
       this.spawnRoadblock(game);
-      this.roadblockTimer = Math.max(13, 30 - heat * 2.4) + rand(0, 7);
+      this.roadblockTimer = Math.max(16, 36 - heat * 2.2) + rand(0, 9);
     }
 
     this.heliTimer -= dt;
@@ -190,7 +190,7 @@ export class PoliceForce {
       id: this._nextId++,
       type, x: point.x, y: point.y, z: def.flying ? 5.5 : 0,
       vx: 0, vy: 0, heading: rand(-Math.PI, Math.PI),
-      health: def.health * (1 + Math.max(0, game.heat - 2) * 0.1),
+      health: def.health * (1 + Math.max(0, game.heat - 2) * 0.06),
       maxHealth: def.health, radius: def.radius,
       fireCd: rand(1.2, 3.5), ramCd: 0, losTimer: 0, hasLos: false,
       navX: Math.round(point.x / BLOCK) * BLOCK,
@@ -258,10 +258,10 @@ export class PoliceForce {
     let desired = def.maxSpeed * (0.82 + Math.min(5, game.heat) * 0.045);
     desired *= 1 - clamp(err / 2.4, 0, 0.62);
     // keep the pressure on: distant units get a catch-up boost unless the player is boosting away
-    if (d > 110 && !player.boosting && player.speed < 80) {
-      desired *= 1 + clamp((d - 110) / 300, 0, 0.28);
+    if (d > 120 && !player.boosting && player.speed < 72) {
+      desired *= 1 + clamp((d - 120) / 420, 0, 0.18);
     }
-    if (d < 28 && (cop.type === 'rammer' || cop.type === 'drone')) desired *= 1.25;
+    if (d < 28 && (cop.type === 'rammer' || cop.type === 'drone')) desired *= 1.12;
     if (!cop.hasLos) desired *= 0.92;
 
     let ax = Math.cos(cop.heading) * desired;
@@ -332,7 +332,7 @@ export class PoliceForce {
       if (cop.ramCd <= 0) {
         cop.ramCd = 0.85;
         const rel = Math.hypot(player.vx - cop.vx, player.vy - cop.vy);
-        let dmg = (cop.type === 'rammer' ? 10 : 6) + rel * 0.22;
+        let dmg = (cop.type === 'rammer' ? 7 : 4) + rel * 0.14;
         if (cop.type === 'drone') dmg *= 0.7;
         player.damage(dmg, game, cop);
         game.fx.sparks((player.x + cop.x) / 2, (player.y + cop.y) / 2, 1, 8, '#ffd58a', 10);
@@ -495,7 +495,7 @@ export class PoliceForce {
         p.vy -= res.ny * vn * 1.5;
         const force = Math.abs(vn);
         if (force > 12) {
-          p.damage(clamp(force * 0.24, 2, 16), game, b);
+          p.damage(clamp(force * 0.18, 2, 12), game, b);
           b.hp -= force * 0.32;
           b.flash = 1;
           game.addShake(0.5);
@@ -573,14 +573,14 @@ export class PoliceForce {
       game.spawnBullet({
         x: h.x, y: h.y, z: 0.8,
         vx: Math.cos(a) * 150, vy: Math.sin(a) * 150,
-        life: 1.2, damage: 4.5, owner: 'cop', color: '#ff7b7b', size: 1, angle: a,
+        life: 1.2, damage: 3.5, owner: 'cop', color: '#ff7b7b', size: 1, angle: a,
       });
       game.fx.muzzle(h.x, h.y, 1, a, '#ff9b6b');
       game.fx.sparks(h.x, h.y, h.z, 2, '#ffd58a', 5);
       game.audio.copGun();
     }
     if (h.fireCd <= 0 && dist(h.x, h.y, p.x, p.y) < 130) {
-      h.fireCd = Math.max(1.7, 3.4 - game.heat * 0.25);
+      h.fireCd = Math.max(2.0, 4.0 - game.heat * 0.2);
       h.burst = 4;
       h.burstCd = 0.45;
       h.warn = 0.75;

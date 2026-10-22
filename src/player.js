@@ -36,6 +36,7 @@ export class Player {
 
     this.forwardSpeed = 0;
     this.lateralSpeed = 0;
+    this.steer = 0;
     this.speed = 0;
     this.slipAngle = 0;
     this.topSpeed = 0;
@@ -46,6 +47,8 @@ export class Player {
     this.comboTimer = 0;
     this.comboPeak = 0;
     this.airTime = 0;
+    this.flipAngle = 0;
+    this.flipDone = false;
 
     this.weapon = 'smg';
     this.owned = { smg: 45 };
@@ -190,7 +193,10 @@ export class Player {
 
     const throttle = input.isDown('forward') ? 1 : 0;
     const brake = input.isDown('back') ? 1 : 0;
-    let steer = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
+    const steerTarget = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
+    // smooth digital steering so taps don't snap the car sideways
+    this.steer = damp(this.steer, steerTarget, 14, dt);
+    const steer = this.steer;
     const handbrake = input.isDown('handbrake');
     this.handbraking = handbrake;
 
@@ -203,6 +209,8 @@ export class Player {
       this.jumpCooldown = 0.45;
       this.turbo -= JUMP_COST;
       this.landTimer = 0;
+      this.flipAngle = 0;
+      this.flipDone = false;
       if (game) {
         game.fx.jumpJet(this.x, this.y, this.heading);
         game.fx.ring(this.x, this.y, 5, '#8ffcff');
@@ -229,12 +237,12 @@ export class Player {
     let grip = gripBase;
     const steerSpeedFactor = clamp(speed / 11, 0, 1) * (1 - clamp(speed / 145, 0, 0.35));
     let turnRate = PLAYER.steerRate * steerSpeedFactor * (this.airborne ? 0.45 : 1);
-    if (handbrake && !this.airborne) { grip = PLAYER.handbrakeGrip; turnRate *= 1.25; }
+    if (handbrake && !this.airborne) { grip = PLAYER.handbrakeGrip; turnRate *= 1.15; }
     if (this.boosting) turnRate *= 0.92;
 
-    // auto-drift when cornering hard at speed
+    // gentle natural drift when cornering at speed (handbrake gives the big slides)
     const cornering = Math.abs(steer) * clamp(speed / 55, 0, 1);
-    if (!this.airborne && !handbrake) grip = lerp(grip, PLAYER.driftGrip, cornering * 0.7);
+    if (!this.airborne && !handbrake) grip = lerp(grip, PLAYER.driftGrip, cornering * 0.4);
 
     this.heading += steer * turnRate * dt * dirSign;
     if (this.heading > Math.PI) this.heading -= TAU;
@@ -317,6 +325,11 @@ export class Player {
       this.z += this.vz * dt;
       this.vz -= PLAYER.gravity * dt;
       this.airTime += dt;
+      // full 360 body flip during the hang time
+      if (this.flipAngle < TAU) {
+        this.flipAngle = Math.min(TAU, this.flipAngle + (TAU / 0.72) * dt);
+        if (this.flipAngle >= TAU) this.flipDone = true;
+      }
       if (this.z <= 0) {
         const impact = Math.abs(this.vz);
         this.z = 0;
@@ -327,13 +340,23 @@ export class Player {
           game.fx.landDust(this.x, this.y, impact);
           game.addShake(clamp(impact * 0.05, 0.15, 0.9));
           game.audio.land();
+          if (this.flipDone) {
+            this.bumpCombo(game, 1);
+            this.addScore(240, game, '360 FLIP');
+            this.addTurbo(10);
+            game.hud.toast('360 FLIP — CLEAN LANDING +TURBO', 'good');
+          }
           if (this.airTime > 0.7) {
             this.bumpCombo(game, 2);
-            this.addScore(60 + this.airTime * 80, game, 'AIRTIME');
-            game.hud.toast(`AIR TIME ${this.airTime.toFixed(1)}s — +TURBO`, 'good');
+            if (!this.flipDone) {
+              this.addScore(60 + this.airTime * 80, game, 'AIRTIME');
+              game.hud.toast(`AIR TIME ${this.airTime.toFixed(1)}s — +TURBO`, 'good');
+            }
             this.addTurbo(8 + this.airTime * 4);
           }
         }
+        this.flipAngle = 0;
+        this.flipDone = false;
         this.airTime = 0;
       }
     }
