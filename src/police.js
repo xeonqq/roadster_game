@@ -175,6 +175,7 @@ export class PoliceForce {
     for (let i = 0; i < 30; i++) {
       const p = game.world.randomRoadPoint(player.x, player.y, 90, 165);
       if (!p.onRoad) continue;
+      if (game.world.isWater(p.x, p.y)) continue;
       if (!game.world.isClear(p.x, p.y, 5)) continue;
       if (dist(p.x, p.y, player.x, player.y) < 72) continue;
       const ahead = (p.x - player.x) * hx + (p.y - player.y) * hy;
@@ -300,6 +301,14 @@ export class PoliceForce {
         }
         cop.stuck += dt * 2;
       });
+      // ground units stop at the seawall; only the suspect gets a boat
+      if (game.world.isWater(cop.x, cop.y)) {
+        cop.x -= cop.vx * dt;
+        cop.y -= cop.vy * dt;
+        cop.vx *= -0.25;
+        cop.vy *= -0.25;
+        cop.stuck += dt;
+      }
     }
 
     // unstick logic
@@ -416,6 +425,7 @@ export class PoliceForce {
       axis = 'y';
     }
     if (!game.world.isClear(bx, by, 4)) return;
+    if (game.world.isWater(bx, by)) return;
     if (this.roadblocks.some((r) => dist(r.x, r.y, bx, by) < 90)) return;
 
     const gap = chance(0.62) ? Math.floor(rand(0, 4)) : -1;

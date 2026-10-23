@@ -1,5 +1,5 @@
 import {
-  BLOCK, ROAD, CURB, DISTRICTS, SIGNS,
+  BLOCK, ROAD, CURB, DISTRICTS, SIGNS, BAY,
 } from './config.js';
 import {
   mulberry32, hash2, clamp, randRange, randInt, pick, chance, pickWeighted,
@@ -103,6 +103,12 @@ export class World {
       district,
       seed: rng() * 1e9,
     };
+
+    // everything east of the seawall is the bay
+    if (this.isBayBlock(bx, by)) {
+      block.type = 'water';
+      return block;
+    }
 
     // landmarks near the spawning intersection -----------------------------
     if (bx === 0 && by === 2) {
@@ -296,6 +302,7 @@ export class World {
   }
 
   districtAt(x, y) {
+    if (x >= BAY.edgeX) return 'SAN FRANCISCO BAY';
     const bx = Math.floor(x / BLOCK);
     const by = Math.floor(y / BLOCK);
     if (Math.abs(bx) < 3 && Math.abs(by) < 3) return 'SOMA';
@@ -376,6 +383,41 @@ export class World {
       if (pointRectDist(x, y, b.x0, b.y0, b.x1, b.y1) < radius) return false;
     }
     return true;
+  }
+
+  // ── bay / escape route ────────────────────────────────────────────────
+  isBayBlock(bx) {
+    return bx >= Math.floor(BAY.edgeX / BLOCK);
+  }
+
+  isPier(x, y) {
+    if (x < BAY.edgeX - 4 || x > BAY.pierEnd + 2) return false;
+    for (const g of BAY.gates) if (Math.abs(y - g) <= BAY.pierHalf) return true;
+    return false;
+  }
+
+  onBoat(x, y) {
+    return x >= BAY.boatX0 && x <= BAY.boatX1 && Math.abs(y) <= BAY.boatHalfY;
+  }
+
+  isWater(x, y) {
+    if (x < BAY.edgeX) return false;
+    if (x <= BAY.pierEnd + 2) return !this.isPier(x, y);
+    if (x < BAY.boatX0) return true;
+    return !this.onBoat(x, y);
+  }
+
+  deckHeightAt(x, y) {
+    return this.onBoat(x, y) ? BAY.deckZ : 0;
+  }
+
+  nearestGate(x, y) {
+    let best = BAY.gates[0], bd = Infinity;
+    for (const g of BAY.gates) {
+      const d = Math.abs(y - g);
+      if (d < bd) { bd = d; best = g; }
+    }
+    return { y: best, dist: bd };
   }
 
   blocksInRect(x0, y0, x1, y1) {

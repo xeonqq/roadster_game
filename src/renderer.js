@@ -1,5 +1,5 @@
-import { BLOCK, ROAD, CURB, WEAPONS } from './config.js';
-import { clamp, damp, lerp, TAU, shade, rgba } from './utils.js';
+import { BLOCK, ROAD, CURB, WEAPONS, BAY } from './config.js';
+import { clamp, damp, dampAngle, lerp, TAU, shade, rgba } from './utils.js';
 
 const WIN_PALETTE = ['#7ffcff', '#ffd58a', '#ff9be0', '#c9d7ff', '#b5ffdb', '#f4f7ff'];
 const FONT_MONO = '"DejaVu Sans Mono", "SF Mono", Consolas, monospace';
@@ -51,6 +51,14 @@ export class Renderer {
     this.zoom = 7;
     this.baseZoom = 7;
     this.cam = { x: 0, y: 0, zoom: 7 };
+    this.camYaw = Math.PI / 4;
+    this.pitch = 1.0;
+    this.heightScale = 0.7;
+    this.anchorY = 0.57;
+    this.cosYaw = Math.cos(this.camYaw);
+    this.sinYaw = Math.sin(this.camYaw);
+    this.forwardScale = 7;
+    this.zScale = 3;
     this.shakeMag = 0;
     this.shakeX = 0;
     this.shakeY = 0;
@@ -78,8 +86,9 @@ export class Renderer {
     this.canvas.style.width = w + 'px';
     this.canvas.style.height = h + 'px';
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    this.baseZoom = clamp(Math.max(w / 260, h / 165), 4.2, 9.4);
+    this.baseZoom = clamp(Math.max(w / 200, h / 128), 5.2, 10.5);
     if (initial) this.cam.zoom = this.baseZoom;
+    this.updateProjection();
     this.rain = [];
     for (let i = 0; i < 190; i++) {
       this.rain.push({
@@ -98,6 +107,7 @@ export class Renderer {
     const zoom = this.cam.zoom;
     this.resize();
     this.cam.zoom = zoom;
+    this.updateProjection();
   }
 
 
@@ -129,6 +139,8 @@ export class Renderer {
     this.cam.x = player.x;
     this.cam.y = player.y;
     this.cam.zoom = this.baseZoom;
+    this.camYaw = player.heading;
+    this.updateProjection();
     this.shakeMag = 0;
     this.shakeX = 0;
     this.shakeY = 0;
@@ -138,46 +150,68 @@ export class Renderer {
     this.shakeMag = Math.min(26, this.shakeMag + amount * 7);
   }
 
+  updateProjection() {
+    const zoom = this.cam.zoom;
+    this.cosYaw = Math.cos(this.camYaw);
+    this.sinYaw = Math.sin(this.camYaw);
+    this.forwardScale = zoom * Math.sin(this.pitch);
+    this.zScale = zoom * Math.cos(this.pitch) * this.heightScale;
+    this.ox = this.width / 2;
+    this.oy = this.height * this.anchorY;
+  }
+
+  // Rear chase projection: the camera sits behind the car, aligned with its nose.
+  // The world is rotated into camera space, then tilted down for a 2.5D view.
   worldToScreen(x, y, z = 0) {
-    const zz = this.cam.zoom;
+    const dx = x - this.cam.x;
+    const dy = y - this.cam.y;
+    const u = -dx * this.sinYaw + dy * this.cosYaw;
+    const v = dx * this.cosYaw + dy * this.sinYaw;
     return {
-      x: (x - y) * zz + this.ox,
-      y: (x + y) * 0.5 * zz - z * zz + this.oy,
+      x: this.ox + u * this.cam.zoom,
+      y: this.oy - v * this.forwardScale - z * this.zScale,
     };
   }
 
   screenToWorld(sx, sy) {
-    const zz = this.cam.zoom;
-    const a = (sx - this.ox) / zz;
-    const b = ((sy - this.oy) / zz) * 2;
-    return { x: (a + b) / 2, y: (b - a) / 2 };
+    const u = (sx - this.ox) / this.cam.zoom;
+    const v = (this.oy - sy) / Math.max(0.0001, this.forwardScale);
+    return {
+      x: this.cam.x - u * this.sinYaw + v * this.cosYaw,
+      y: this.cam.y + u * this.cosYaw + v * this.sinYaw,
+    };
+  }
+
+  depthKey(x, y) {
+    return -((x - this.cam.x) * this.cosYaw + (y - this.cam.y) * this.sinYaw);
   }
 
   updateCamera(dt, game) {
     this.time += dt;
     const p = game.player;
     let targetX = p.x, targetY = p.y, targetZoom = this.baseZoom;
+    let targetYaw = this.camYaw;
     if (game.state === 'menu') {
       this.menuAngle += dt;
       targetX = Math.cos(this.menuAngle * 0.11) * 26;
       targetY = -2 + Math.sin(this.menuAngle * 0.07) * 18;
       targetZoom = this.baseZoom * 0.9;
+      targetYaw = Math.PI / 4;
     } else {
       const speed = Math.hypot(p.vx, p.vy);
-      const dir = p.forwardSpeed < -0.5 ? -1 : 1;
-      // look down the road, not just at the car
-      const look = clamp(7 + speed * 0.3, 7, 26);
-      targetX = p.x + Math.cos(p.heading) * look * dir + (speed > 1 ? (p.vx / speed) * 3 : 0);
-      targetY = p.y + Math.sin(p.heading) * look * dir + (speed > 1 ? (p.vy / speed) * 3 : 0);
-      // subtle look toward the cursor
-      const m = game.input.mouse;
-      targetX += clamp((m.x - this.width / 2) / this.width, -0.5, 0.5) * 4;
-      targetY += clamp((m.y - this.height / 2) / this.height, -0.5, 0.5) * 3;
-      targetZoom = this.baseZoom * (1 - clamp(speed / 135, 0, 0.2) - (p.boosting ? 0.05 : 0));
+      // chase the car from behind: camera looks over the nose, car sits low on screen
+      const ahead = clamp(6 + speed * 0.18, 6, 18);
+      targetX = p.x + Math.cos(p.heading) * ahead;
+      targetY = p.y + Math.sin(p.heading) * ahead;
+      targetYaw = p.heading;
+      targetZoom = this.baseZoom * (1 - clamp(speed / 135, 0, 0.14) - (p.boosting ? 0.04 : 0));
+      // pull back for the huge cargo deck so the landing zone reads
+      if (p.x > BAY.edgeX + 22) targetZoom *= 0.66;
       if (game.state === 'dying') targetZoom *= 0.94;
     }
-    this.cam.x = damp(this.cam.x, targetX, 6.8, dt);
-    this.cam.y = damp(this.cam.y, targetY, 6.8, dt);
+    this.cam.x = damp(this.cam.x, targetX, 8.5, dt);
+    this.cam.y = damp(this.cam.y, targetY, 8.5, dt);
+    this.camYaw = dampAngle(this.camYaw, targetYaw, 5.0, dt);
     this.cam.zoom = damp(this.cam.zoom, targetZoom, 2.2, dt);
 
     this.shakeMag *= Math.exp(-6.5 * dt);
@@ -185,8 +219,7 @@ export class Renderer {
     this.shakeX = (Math.random() * 2 - 1) * this.shakeMag;
     this.shakeY = (Math.random() * 2 - 1) * this.shakeMag;
 
-    this.ox = this.width / 2 - (this.cam.x - this.cam.y) * this.cam.zoom;
-    this.oy = this.height * 0.55 - (this.cam.x + this.cam.y) * 0.5 * this.cam.zoom;
+    this.updateProjection();
   }
 
   visibleWorld() {
@@ -205,8 +238,6 @@ export class Renderer {
   render(game, dt) {
     const ctx = this.ctx;
     this.updateCamera(dt, game);
-    this.ox = this.width / 2 - (this.cam.x - this.cam.y) * this.cam.zoom;
-    this.oy = this.height * 0.55 - (this.cam.x + this.cam.y) * 0.5 * this.cam.zoom;
 
     // base sky / asphalt
     const bg = ctx.createLinearGradient(0, 0, 0, this.height);
@@ -223,6 +254,7 @@ export class Renderer {
     ctx.translate(this.shakeX, this.shakeY);
 
     this.drawGround(game, blocks, vis);
+    this.drawBay(game);
     this.drawGroundGlow(game, blocks);
     this.drawSkids(game);
     this.drawLightCones(game);
@@ -244,6 +276,9 @@ export class Renderer {
         case 'spike': this.drawSpike(it.spike); break;
         case 'ramp': this.drawRamp(it.pickup); break;
         case 'boostpad': this.drawBoostpad(it.pickup); break;
+        case 'hill': this.drawHill(it.pickup); break;
+        case 'boat': this.drawBoat(); break;
+        case 'gate': this.drawGate(it.gate); break;
         default: break;
       }
     }
@@ -260,10 +295,108 @@ export class Renderer {
     this.drawRain(dt, game);
     this.drawSpeedLines(game);
     this.drawFlashes(game);
-    if (game.state === 'playing' || game.state === 'dying') this.drawVignette();
+    this.drawSlowMo(game);
+    if (game.state === 'playing' || game.state === 'dying' || game.state === 'won') this.drawVignette();
   }
 
   // ── ground ────────────────────────────────────────────────────────────
+  drawBay(game) {
+    const ctx = this.ctx;
+    const x0 = BAY.edgeX - 8, x1 = BAY.edgeX + 520;
+    // the bay runs the full height of the map; follow the chase camera
+    const y0 = this.cam.y - 900, y1 = this.cam.y + 900;
+    const A = this.worldToScreen(x0, y0);
+    const B = this.worldToScreen(x1, y0);
+    const C = this.worldToScreen(x1, y1);
+    const D = this.worldToScreen(x0, y1);
+    poly(ctx, [[A.x, A.y], [B.x, B.y], [C.x, C.y], [D.x, D.y]]);
+    const g = ctx.createLinearGradient(A.x, A.y, C.x, C.y);
+    g.addColorStop(0, '#041018');
+    g.addColorStop(0.55, '#061a26');
+    g.addColorStop(1, '#020a12');
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    ctx.save();
+    poly(ctx, [[A.x, A.y], [B.x, B.y], [C.x, C.y], [D.x, D.y]]);
+    ctx.clip();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 32; i++) {
+      const wy = y0 + i * 46;
+      const p1 = this.worldToScreen(x0, wy);
+      const p2 = this.worldToScreen(x1, wy);
+      ctx.strokeStyle = `rgba(88,205,235,${0.025 + 0.018 * Math.sin(this.time * 0.7 + i)})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+    // drifting foam crests
+    for (let i = 0; i < 22; i++) {
+      const wy = y0 + 80 + ((i * 71 + this.time * 9) % 1640);
+      const wx = BAY.edgeX + 20 + ((i * 113 + this.time * 13) % 430);
+      const p = this.worldToScreen(wx, wy);
+      ctx.strokeStyle = `rgba(150,245,255,${0.06 + 0.05 * Math.sin(this.time + i)})`;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 9, 2.4, 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // seawall edge with the three route gates
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < BAY.gates.length; i++) {
+      const a = this.worldToScreen(BAY.edgeX, BAY.gates[i] - BAY.pierHalf - 5);
+      const b = this.worldToScreen(BAY.edgeX, BAY.gates[i] + BAY.pierHalf + 5);
+      ctx.strokeStyle = 'rgba(95,251,241,0.72)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    const w1 = this.worldToScreen(BAY.edgeX, y0);
+    const w2 = this.worldToScreen(BAY.edgeX, y1);
+    ctx.strokeStyle = 'rgba(90,160,180,0.24)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(w1.x, w1.y); ctx.lineTo(w2.x, w2.y); ctx.stroke();
+    ctx.restore();
+
+    // piers
+    for (const gate of BAY.gates) {
+      const px0 = BAY.edgeX - 4, px1 = BAY.pierEnd + 2;
+      const py0 = gate - BAY.pierHalf, py1 = gate + BAY.pierHalf;
+      const a = this.worldToScreen(px0, py0);
+      const b = this.worldToScreen(px1, py0);
+      const c = this.worldToScreen(px1, py1);
+      const d = this.worldToScreen(px0, py1);
+      poly(ctx, [[a.x, a.y], [b.x, b.y], [c.x, c.y], [d.x, d.y]]);
+      ctx.fillStyle = '#1a2430';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(120,180,200,0.35)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // planks
+      ctx.strokeStyle = 'rgba(120,160,180,0.14)';
+      ctx.lineWidth = 1;
+      for (let wx = px0 + 6; wx < px1; wx += 6) {
+        const p1 = this.worldToScreen(wx, py0 + 1);
+        const p2 = this.worldToScreen(wx, py1 - 1);
+        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      }
+      // edge lights
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(95,251,241,0.8)';
+      for (let wx = px0 + 10; wx < px1; wx += 22) {
+        for (const wy of [py0 + 1, py1 - 1]) {
+          const p = this.worldToScreen(wx, wy, 0.4);
+          ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, TAU); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
   drawGround(game, blocks, vis) {
     const ctx = this.ctx;
     // asphalt sheen
@@ -542,54 +675,59 @@ export class Renderer {
     for (const block of blocks) {
       for (const b of block.buildings) {
         const s = this.worldToScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
-        const hpx = b.h * this.cam.zoom * 0.48;
+        const hpx = b.h * this.zScale;
         if (!visible(s.x, s.y - hpx, 160) && !visible(s.x, s.y, 160)) continue;
-        items.push({ kind: b.style === 'pyramid' ? 'pyramid' : 'building', b, depth: b.x1 + b.y1 });
+        items.push({ kind: b.style === 'pyramid' ? 'pyramid' : 'building', b, depth: this.depthKey((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2) });
       }
       for (const p of block.props.lights) {
         const s = this.worldToScreen(p.x, p.y);
-        if (visible(s.x, s.y, 60)) items.push({ kind: 'prop', type: 'light', prop: p, depth: p.x + p.y });
+        if (visible(s.x, s.y, 60)) items.push({ kind: 'prop', type: 'light', prop: p, depth: this.depthKey(p.x, p.y) });
       }
       for (const p of block.props.trees) {
         const s = this.worldToScreen(p.x, p.y);
-        if (visible(s.x, s.y, 70)) items.push({ kind: 'prop', type: 'tree', prop: p, depth: p.x + p.y });
+        if (visible(s.x, s.y, 70)) items.push({ kind: 'prop', type: 'tree', prop: p, depth: this.depthKey(p.x, p.y) });
       }
       for (const p of block.props.signs) {
         const s = this.worldToScreen(p.x, p.y);
-        if (visible(s.x, s.y, 80)) items.push({ kind: 'prop', type: 'sign', prop: p, depth: p.x + p.y });
+        if (visible(s.x, s.y, 80)) items.push({ kind: 'prop', type: 'sign', prop: p, depth: this.depthKey(p.x, p.y) });
       }
       for (const p of block.props.parked) {
         const s = this.worldToScreen(p.x, p.y);
-        if (visible(s.x, s.y, 60)) items.push({ kind: 'prop', type: 'parked', prop: p, depth: p.x + p.y + 0.2 });
+        if (visible(s.x, s.y, 60)) items.push({ kind: 'prop', type: 'parked', prop: p, depth: this.depthKey(p.x, p.y) + 0.2 });
       }
       for (const p of block.props.holos) {
         const s = this.worldToScreen(p.x, p.y);
-        if (visible(s.x, s.y, 140)) items.push({ kind: 'prop', type: 'holo', prop: p, depth: p.x + p.y });
+        if (visible(s.x, s.y, 140)) items.push({ kind: 'prop', type: 'holo', prop: p, depth: this.depthKey(p.x, p.y) });
       }
       for (const p of block.props.cranes) {
         const s = this.worldToScreen(p.x, p.y);
-        if (visible(s.x, s.y - 300, 120)) items.push({ kind: 'prop', type: 'crane', prop: p, depth: p.x + p.y });
+        if (visible(s.x, s.y - 300, 120)) items.push({ kind: 'prop', type: 'crane', prop: p, depth: this.depthKey(p.x, p.y) });
       }
       for (const p of block.props.planters) {
         const s = this.worldToScreen(p.x, p.y);
-        if (visible(s.x, s.y, 50)) items.push({ kind: 'prop', type: 'planter', prop: p, depth: p.x + p.y });
+        if (visible(s.x, s.y, 50)) items.push({ kind: 'prop', type: 'planter', prop: p, depth: this.depthKey(p.x, p.y) });
       }
     }
 
     for (const p of game.pickups) {
-      if (p.kind === 'ramp') items.push({ kind: 'ramp', pickup: p, depth: p.x + p.y - 0.4 });
-      else if (p.kind === 'boostpad') items.push({ kind: 'boostpad', pickup: p, depth: p.x + p.y - 0.3 });
-      else items.push({ kind: 'pickup', pickup: p, depth: p.x + p.y });
+      if (p.kind === 'ramp') items.push({ kind: 'ramp', pickup: p, depth: this.depthKey(p.x, p.y) - 0.4 });
+      else if (p.kind === 'boostpad') items.push({ kind: 'boostpad', pickup: p, depth: this.depthKey(p.x, p.y) - 0.3 });
+      else if (p.kind === 'hill') items.push({ kind: 'hill', pickup: p, depth: this.depthKey(p.x, p.y) - 0.2 });
+      else items.push({ kind: 'pickup', pickup: p, depth: this.depthKey(p.x, p.y) });
     }
-    for (const b of game.police.barriers) items.push({ kind: 'barrier', barrier: b, depth: b.x + b.y + 0.1 });
-    for (const s of game.police.spikes) items.push({ kind: 'spike', spike: s, depth: s.x + s.y - 0.2 });
-    for (const wr of game.police.wrecks) items.push({ kind: 'wreck', wreck: wr, depth: wr.x + wr.y });
-    for (const c of game.police.cops) items.push({ kind: 'cop', cop: c, depth: c.x + c.y + 0.3 });
-    for (const heli of game.police.helicopters) items.push({ kind: 'heli', heli, depth: heli.x + heli.y + 0.4 });
+    for (const gate of game.missionGates) {
+      items.push({ kind: 'gate', gate, depth: this.depthKey(gate.x, gate.y) - 0.5 });
+    }
+    items.push({ kind: 'boat', depth: this.depthKey((BAY.boatX0 + BAY.boatX1) / 2, 0) - 0.6 });
+    for (const b of game.police.barriers) items.push({ kind: 'barrier', barrier: b, depth: this.depthKey(b.x, b.y) + 0.1 });
+    for (const s of game.police.spikes) items.push({ kind: 'spike', spike: s, depth: this.depthKey(s.x, s.y) - 0.2 });
+    for (const wr of game.police.wrecks) items.push({ kind: 'wreck', wreck: wr, depth: this.depthKey(wr.x, wr.y) });
+    for (const c of game.police.cops) items.push({ kind: 'cop', cop: c, depth: this.depthKey(c.x, c.y) + 0.3 });
+    for (const heli of game.police.helicopters) items.push({ kind: 'heli', heli, depth: this.depthKey(heli.x, heli.y) + 0.4 });
 
     const p = game.player;
     if (game.state !== 'menu' || true) {
-      items.push({ kind: 'player', depth: p.x + p.y + 0.35 });
+      items.push({ kind: 'player', depth: this.depthKey(p.x, p.y) + 0.35 });
     }
     return items;
   }
@@ -598,7 +736,7 @@ export class Renderer {
   drawBuilding(b, game) {
     const ctx = this.ctx;
     const z = this.cam.zoom;
-    const hpx = b.h * z * 0.48;
+    const hpx = b.h * this.zScale;
     const A = this.worldToScreen(b.x0, b.y0);
     const B = this.worldToScreen(b.x1, b.y0);
     const C = this.worldToScreen(b.x1, b.y1);
@@ -619,10 +757,11 @@ export class Renderer {
     ctx.fill();
     ctx.restore();
 
-    // right face (+x)
-    this.drawBuildingFace(b, B, C, hpx, false, ga);
-    // left face (+y)
-    this.drawBuildingFace(b, C, D, hpx, true, ga);
+    // the two box faces that point toward the camera
+    const xFace = this.cosYaw >= 0 ? [D, A] : [B, C];
+    const yFace = this.sinYaw >= 0 ? [A, B] : [C, D];
+    if (Math.abs(this.cosYaw) > 0.02) this.drawBuildingFace(b, xFace[0], xFace[1], hpx, false, ga);
+    if (Math.abs(this.sinYaw) > 0.02) this.drawBuildingFace(b, yFace[0], yFace[1], hpx, true, ga);
 
     // roof
     poly(ctx, [[top.A.x, top.A.y], [top.B.x, top.B.y], [top.C.x, top.C.y], [top.D.x, top.D.y]]);
@@ -632,15 +771,17 @@ export class Renderer {
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // roof neon rim on visible edges
+    // roof neon rim
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = rgba(b.accent, 0.34);
-    ctx.lineWidth = 1.3;
+    ctx.strokeStyle = rgba(b.accent, 0.3);
+    ctx.lineWidth = 1.1;
     ctx.beginPath();
-    ctx.moveTo(top.B.x, top.B.y);
+    ctx.moveTo(top.A.x, top.A.y);
+    ctx.lineTo(top.B.x, top.B.y);
     ctx.lineTo(top.C.x, top.C.y);
     ctx.lineTo(top.D.x, top.D.y);
+    ctx.closePath();
     ctx.stroke();
     ctx.restore();
 
@@ -691,7 +832,12 @@ export class Renderer {
       }
     }
 
-    if (b.sign) this.drawBuildingSign(b, top, hpx, C, B, D);
+    if (b.sign) {
+      const face = Math.abs(this.cosYaw) >= Math.abs(this.sinYaw)
+        ? (this.cosYaw >= 0 ? [D, A] : [B, C])
+        : (this.sinYaw >= 0 ? [A, B] : [C, D]);
+      this.drawBuildingSign(b, hpx, face);
+    }
     if (b.name) {
       const s = this.worldToScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.h);
       ctx.save();
@@ -707,9 +853,10 @@ export class Renderer {
   occludesPlayer(b, game) {
     if (!game || !game.player) return false;
     const p = game.player;
-    if (b.x1 + b.y1 <= p.x + p.y + 0.4) return false;
+    const bKey = this.depthKey((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    if (bKey < this.depthKey(p.x, p.y)) return false;
     const s = this.worldToScreen(p.x, p.y, Math.min(1.4, (p.z || 0) + 1.1));
-    const hpx = b.h * this.cam.zoom * 0.48;
+    const hpx = b.h * this.zScale;
     const A = this.worldToScreen(b.x0, b.y0);
     const B = this.worldToScreen(b.x1, b.y0);
     const C = this.worldToScreen(b.x1, b.y1);
@@ -804,21 +951,23 @@ export class Renderer {
     ctx.restore();
   }
 
-  drawBuildingSign(b, top, hpx, C, B, D) {
+  drawBuildingSign(b, hpx, face) {
     const ctx = this.ctx;
     const s = b.sign;
-    let px, py;
+    let px, py, faceW = 0;
     if (s.type === 'roof' || s.type === 'billboard') {
       const roofC = this.worldToScreen((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, b.h);
       px = roofC.x;
       py = roofC.y - 18;
     } else {
-      const face = s.side === 'right' ? [B, C] : [C, D];
       px = (face[0].x + face[1].x) / 2;
       py = Math.max(face[0].y, face[1].y) - hpx * 0.62;
+      faceW = Math.hypot(face[0].x - face[1].x, face[0].y - face[1].y);
     }
     const big = s.type === 'billboard' ? 1.5 : 1;
-    const wpan = Math.min(120, (b.x1 - b.x0) * this.cam.zoom * 0.68) * big;
+    const wpan = (s.type === 'roof' || s.type === 'billboard'
+      ? Math.min(120, (b.x1 - b.x0) * this.cam.zoom * 0.68)
+      : Math.min(120, Math.max(34, faceW * 0.72))) * big;
     const hpan = 18 * big;
     ctx.save();
     ctx.translate(px, py);
@@ -845,7 +994,7 @@ export class Renderer {
   drawPyramid(b, game) {
     const ctx = this.ctx;
     const z = this.cam.zoom;
-    const hpx = b.h * z * 0.48;
+    const hpx = b.h * this.zScale;
     const A = this.worldToScreen(b.x0, b.y0);
     const B = this.worldToScreen(b.x1, b.y0);
     const C = this.worldToScreen(b.x1, b.y1);
@@ -860,50 +1009,50 @@ export class Renderer {
     ctx.fill();
     ctx.restore();
 
-    // faces
-    const rightG = ctx.createLinearGradient(apex.x, apex.y, B.x, B.y);
-    rightG.addColorStop(0, '#35405c');
-    rightG.addColorStop(1, '#151b2b');
-    poly(ctx, [[B.x, B.y], [C.x, C.y], [apex.x, apex.y]]);
-    ctx.fillStyle = rightG;
-    ctx.fill();
-
-    const leftG = ctx.createLinearGradient(apex.x, apex.y, D.x, D.y);
-    leftG.addColorStop(0, '#222b42');
-    leftG.addColorStop(1, '#0e1320');
-    poly(ctx, [[C.x, C.y], [D.x, D.y], [apex.x, apex.y]]);
-    ctx.fillStyle = leftG;
-    ctx.fill();
-
-    // window bands
-    ctx.save();
-    poly(ctx, [[B.x, B.y], [C.x, C.y], [apex.x, apex.y]]);
-    ctx.clip();
-    ctx.strokeStyle = 'rgba(255,210,140,0.42)';
-    ctx.lineWidth = 1.2;
-    for (let i = 1; i < 18; i++) {
-      const t = i / 18;
-      const y = C.y + (apex.y - C.y) * t;
-      const w1 = C.x + (apex.x - C.x) * t;
-      const w2 = B.x + (apex.x - B.x) * t;
-      ctx.globalAlpha = 0.2 + 0.5 * Math.abs(Math.sin(this.time * 0.7 + i));
-      ctx.beginPath();
-      ctx.moveTo(w1, y);
-      ctx.lineTo(w2, y);
-      ctx.stroke();
-    }
-    ctx.restore();
+    // faces visible from the chase camera
+    const xFace = this.cosYaw >= 0 ? [D, A] : [B, C];
+    const yFace = this.sinYaw >= 0 ? [A, B] : [C, D];
+    const drawFace = (p1, p2, topColor, bottomColor, bands) => {
+      const g = ctx.createLinearGradient(apex.x, apex.y, p1.x, p1.y);
+      g.addColorStop(0, topColor);
+      g.addColorStop(1, bottomColor);
+      poly(ctx, [[p1.x, p1.y], [p2.x, p2.y], [apex.x, apex.y]]);
+      ctx.fillStyle = g;
+      ctx.fill();
+      if (!bands) return;
+      ctx.save();
+      poly(ctx, [[p1.x, p1.y], [p2.x, p2.y], [apex.x, apex.y]]);
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(255,210,140,0.42)';
+      ctx.lineWidth = 1.1;
+      for (let i = 1; i < 18; i++) {
+        const t = i / 18;
+        const w1 = p1.x + (apex.x - p1.x) * t;
+        const w2 = p2.x + (apex.x - p2.x) * t;
+        const yy = p1.y + (apex.y - p1.y) * t;
+        ctx.globalAlpha = 0.14 + 0.35 * Math.abs(Math.sin(this.time * 0.7 + i));
+        ctx.beginPath();
+        ctx.moveTo(w1, yy);
+        ctx.lineTo(w2, yy);
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+    if (Math.abs(this.cosYaw) > 0.02) drawFace(xFace[0], xFace[1], '#35405c', '#151b2b', true);
+    if (Math.abs(this.sinYaw) > 0.02) drawFace(yFace[0], yFace[1], '#222b42', '#0e1320', true);
 
     // neon edges
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.strokeStyle = 'rgba(255,210,140,0.55)';
     ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(B.x, B.y);
-    ctx.lineTo(apex.x, apex.y);
-    ctx.lineTo(D.x, D.y);
-    ctx.stroke();
+    for (const face of [xFace, yFace]) {
+      ctx.beginPath();
+      ctx.moveTo(face[0].x, face[0].y);
+      ctx.lineTo(apex.x, apex.y);
+      ctx.lineTo(face[1].x, face[1].y);
+      ctx.stroke();
+    }
     ctx.beginPath();
     ctx.moveTo(apex.x, apex.y - 20);
     ctx.lineTo(apex.x, apex.y);
@@ -1143,22 +1292,23 @@ export class Renderer {
   // ── cars ──────────────────────────────────────────────────────────────
   carBasis(x, y, heading, z, lift = 0) {
     const s = this.worldToScreen(x, y, z);
-    const zz = this.cam.zoom;
-    const cos = Math.cos(heading), sin = Math.sin(heading);
-    const aX = (cos - sin) * zz;
-    const aY = (cos + sin) * 0.5 * zz;
-    const bX = (-sin - cos) * zz;
-    const bY = (-sin + cos) * 0.5 * zz;
-    return { sx: s.x, sy: s.y - lift * zz, aX, aY, bX, bY };
+    const rel = heading - this.camYaw;
+    const aX = Math.sin(rel) * this.cam.zoom;
+    const aY = -Math.cos(rel) * this.forwardScale;
+    const bX = Math.cos(rel) * this.cam.zoom;
+    const bY = Math.sin(rel) * this.forwardScale;
+    return { sx: s.x, sy: s.y - lift * this.zScale, aX, aY, bX, bY };
   }
 
-  carSpace(car, lift, fn, spin = 0) {
+  // roll is a barrel roll around the car's longitudinal axis: the lateral
+  // footprint compresses by cos(roll) while the raised side shifts vertically.
+  carSpace(car, lift, fn, roll = 0) {
     const ctx = this.ctx;
-    const b = this.carBasis(car.x, car.y, car.heading, car.z || 0, lift);
+    const b = this.carBasis(car.x, car.y, car.heading, car.z || 0, 0);
+    const cr = Math.cos(roll), sr = Math.sin(roll);
     ctx.save();
-    ctx.translate(b.sx, b.sy);
-    ctx.transform(b.bX, b.bY, b.aX, b.aY, 0, 0);
-    if (spin) ctx.rotate(spin);
+    ctx.translate(b.sx, b.sy - lift * cr * this.zScale);
+    ctx.transform(b.bX * cr, b.bY * cr - sr * this.zScale, b.aX, b.aY, 0, 0);
     fn(b);
     ctx.restore();
   }
@@ -1191,7 +1341,7 @@ export class Renderer {
     const k = o.kind === 'player' ? 1.58 : 1.12;
     const w = 2.15 * k, l = 4.7 * k;
     const z = o.z || 0;
-    const spin = o.kind === 'player' ? (o.flipAngle || 0) : 0;
+    const roll = o.kind === 'player' ? (o.flipAngle || 0) : 0;
     this.drawCarShadow(o, w, l);
 
     // underglow
@@ -1344,7 +1494,7 @@ export class Renderer {
         ctx.lineTo(w * 0.36, l * 0.5);
         ctx.stroke();
       }
-    }, spin);
+    }, roll);
 
     // raised roof volume
     this.carSpace(o, 0.42, () => {
@@ -1378,7 +1528,7 @@ export class Renderer {
         ctx.ellipse(-w * 0.06, 0.05, w * 0.13, l * 0.1, -0.2, 0, TAU);
         ctx.fill();
       }
-    }, spin);
+    }, roll);
 
     if (o.kind === 'cop') {
       // light bar
@@ -1418,7 +1568,7 @@ export class Renderer {
           ctx.fill();
         }
         ctx.restore();
-      }, spin);
+      }, roll);
     }
 
     if (o.kind === 'wreck') {
@@ -1460,17 +1610,17 @@ export class Renderer {
       flipAngle: p.flipAngle,
     });
 
-    // flip trail arcs while the car is tumbling
+    // barrel-roll air rings
     if (p.airborne && p.flipAngle > 0.01) {
       const s = this.worldToScreen(p.x, p.y, p.z);
       const fade = clamp(1 - p.flipAngle / TAU, 0, 1);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = `rgba(143,252,255,${0.35 * fade + 0.12})`;
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = `rgba(143,252,255,${0.28 * fade + 0.1})`;
+      ctx.lineWidth = 1.6;
       for (let i = 0; i < 2; i++) {
         ctx.beginPath();
-        ctx.ellipse(s.x, s.y, 20 + i * 7, 11 + i * 4, p.flipAngle * 0.5, p.flipAngle + i * 1.4, p.flipAngle + i * 1.4 + 1.1);
+        ctx.ellipse(s.x, s.y, 17 + i * 8, 8 + i * 4, 0, 0, TAU);
         ctx.stroke();
       }
       ctx.restore();
@@ -2057,6 +2207,322 @@ export class Renderer {
       ctx.moveTo(l0.x, l0.y);
       ctx.lineTo(mid.x, mid.y);
       ctx.lineTo(r0.x, r0.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+
+  drawHill(p) {
+    const ctx = this.ctx;
+    const base = this.rampCorners(p.x, p.y, p.angle, 9.5, 13.5);
+    const top = this.rampCorners(p.x, p.y, p.angle, 4.4, 7.2);
+    const zTop = 2.9;
+    const bA = this.worldToScreen(base.bl.x, base.bl.y, 0);
+    const bB = this.worldToScreen(base.br.x, base.br.y, 0);
+    const bC = this.worldToScreen(base.fr.x, base.fr.y, 0);
+    const bD = this.worldToScreen(base.fl.x, base.fl.y, 0);
+    const tA = this.worldToScreen(top.bl.x, top.bl.y, zTop);
+    const tB = this.worldToScreen(top.br.x, top.br.y, zTop);
+    const tC = this.worldToScreen(top.fr.x, top.fr.y, zTop);
+    const tD = this.worldToScreen(top.fl.x, top.fl.y, zTop);
+
+    ctx.save();
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath();
+    ctx.ellipse((bA.x + bC.x) / 2, (bA.y + bC.y) / 2 + 3,
+      Math.abs(bB.x - bA.x) * 0.62 + 12, Math.abs(bC.y - bB.y) * 0.42 + 8, 0, 0, TAU);
+    ctx.fill();
+    // sloped faces
+    const faces = [
+      [bA, bB, tB, tA, '#173125'],
+      [bB, bC, tC, tB, '#0e2119'],
+      [bC, bD, tD, tC, '#10261c'],
+      [bD, bA, tA, tD, '#1b3a2a'],
+    ];
+    for (const f of faces) {
+      poly(ctx, [[f[0].x, f[0].y], [f[1].x, f[1].y], [f[2].x, f[2].y], [f[3].x, f[3].y]]);
+      ctx.fillStyle = f[4];
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(125,255,192,0.12)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    // crest / top
+    poly(ctx, [[tA.x, tA.y], [tB.x, tB.y], [tC.x, tC.y], [tD.x, tD.y]]);
+    ctx.fillStyle = '#214a34';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(125,255,192,0.55)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 1; i <= 3; i++) {
+      const t = i / 4;
+      const hw = 9.5 + (4.4 - 9.5) * t;
+      const hl = 13.5 + (7.2 - 13.5) * t;
+      const c = this.rampCorners(p.x, p.y, p.angle, hw, hl);
+      const z = zTop * t;
+      const q = [c.bl, c.br, c.fr, c.fl].map((v) => this.worldToScreen(v.x, v.y, z));
+      ctx.strokeStyle = `rgba(125,255,192,${0.17 - i * 0.035})`;
+      ctx.beginPath();
+      ctx.moveTo(q[0].x, q[0].y);
+      for (let j = 1; j < q.length; j++) ctx.lineTo(q[j].x, q[j].y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    // launch arrow at the crest
+    const m1 = this.worldToScreen(p.x - 3, p.y, zTop + 0.05);
+    const m2 = this.worldToScreen(p.x + 5, p.y, zTop + 0.05);
+    ctx.strokeStyle = 'rgba(190,255,220,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(m1.x, m1.y);
+    ctx.lineTo(m2.x, m2.y);
+    ctx.lineTo(m2.x - 5, m2.y - 3);
+    ctx.moveTo(m2.x, m2.y);
+    ctx.lineTo(m2.x - 5, m2.y + 3);
+    ctx.stroke();
+    const label = this.worldToScreen(p.x, p.y, zTop + 2.2);
+    ctx.font = `700 10px ${FONT_MONO}`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(190,255,220,0.8)';
+    ctx.fillText('HILL', label.x, label.y);
+    ctx.restore();
+  }
+
+  drawGate(gate) {
+    const ctx = this.ctx;
+    const x = gate.x;
+    const half = BAY.pierHalf + 2.4;
+    const h = 10.5;
+    const pulse = 0.55 + Math.sin(this.time * 3.2 + gate.route) * 0.18;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const sy of [-half, half]) {
+      const base = this.worldToScreen(x, gate.y + sy, 0);
+      const top = this.worldToScreen(x, gate.y + sy, h);
+      const grad = ctx.createLinearGradient(base.x, base.y, top.x, top.y);
+      grad.addColorStop(0, `rgba(95,251,241,${0.08 * pulse})`);
+      grad.addColorStop(0.7, `rgba(95,251,241,${0.5 * pulse})`);
+      grad.addColorStop(1, 'rgba(255,47,185,0.85)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); ctx.stroke();
+      ctx.fillStyle = 'rgba(95,251,241,0.9)';
+      ctx.beginPath(); ctx.arc(top.x, top.y, 2.4, 0, TAU); ctx.fill();
+    }
+    // arch
+    const a = this.worldToScreen(x, gate.y - half, h);
+    const b = this.worldToScreen(x, gate.y + half, h);
+    ctx.strokeStyle = `rgba(95,251,241,${0.35 + pulse * 0.25})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    // ground chevrons
+    for (let i = 0; i < 3; i++) {
+      const wx = x - 12 + i * 5;
+      const l = this.worldToScreen(wx, gate.y - half + 2, 0.12);
+      const m = this.worldToScreen(wx + 7, gate.y, 0.12);
+      const r = this.worldToScreen(wx, gate.y + half - 2, 0.12);
+      ctx.strokeStyle = `rgba(95,251,241,${0.5 - i * 0.1})`;
+      ctx.beginPath(); ctx.moveTo(l.x, l.y); ctx.lineTo(m.x, m.y); ctx.lineTo(r.x, r.y); ctx.stroke();
+    }
+    const label = this.worldToScreen(x - 4, gate.y, h + 3);
+    if (label.x > -100 && label.x < this.width + 100 && label.y > -40 && label.y < this.height + 40) {
+      ctx.font = `700 11px ${FONT_MONO}`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(190,255,255,0.92)';
+      ctx.fillText(`${gate.label} GATE`, label.x, label.y);
+      ctx.font = `600 8px ${FONT_MONO}`;
+      ctx.fillStyle = 'rgba(95,251,241,0.6)';
+      ctx.fillText('ESCAPE ROUTE', label.x, label.y + 11);
+    }
+    ctx.restore();
+  }
+
+  drawBoat() {
+    const ctx = this.ctx;
+    const x0 = BAY.boatX0, x1 = BAY.boatX1;
+    const hy = BAY.boatHalfY, dz = BAY.deckZ;
+    const p = (x, y, z) => this.worldToScreen(x, y, z);
+    const A = p(x0, -hy, 0), B = p(x1, -hy, 0), C = p(x1, hy, 0), D = p(x0, hy, 0);
+    const A2 = p(x0, -hy, dz), B2 = p(x1, -hy, dz), C2 = p(x1, hy, dz), D2 = p(x0, hy, dz);
+
+    ctx.save();
+    // hull shadow / wake
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse((A.x + C.x) / 2, (A.y + C.y) / 2 + 8, Math.abs(B.x - A.x) * 0.58, 20, 0, 0, TAU);
+    ctx.fill();
+    // hull sides
+    const sides = [
+      [[A, B, B2, A2], '#111b26'],
+      [[B, C, C2, B2], '#0b141d'],
+      [[C, D, D2, C2], '#0d1720'],
+      [[D, A, A2, D2], '#17232e'],
+    ];
+    for (const [pts, color] of sides) {
+      poly(ctx, pts.map((v) => [v.x, v.y]));
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(120,180,200,0.28)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    // deck
+    poly(ctx, [[A2.x, A2.y], [B2.x, B2.y], [C2.x, C2.y], [D2.x, D2.y]]);
+    ctx.fillStyle = '#22303a';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(150,220,235,0.65)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // landing zone
+    // deck plating
+    ctx.strokeStyle = 'rgba(150,220,235,0.08)';
+    ctx.lineWidth = 1;
+    for (let wx = x0 + 10; wx < x1 - 4; wx += 10) {
+      const q1 = p(wx, -hy + 8, dz + 0.015);
+      const q2 = p(wx, hy - 8, dz + 0.015);
+      ctx.beginPath(); ctx.moveTo(q1.x, q1.y); ctx.lineTo(q2.x, q2.y); ctx.stroke();
+    }
+    for (let wy = -hy + 16; wy < hy - 8; wy += 16) {
+      const q1 = p(x0 + 6, wy, dz + 0.015);
+      const q2 = p(x1 - 6, wy, dz + 0.015);
+      ctx.beginPath(); ctx.moveTo(q1.x, q1.y); ctx.lineTo(q2.x, q2.y); ctx.stroke();
+    }
+    // central landing corridor
+    const lx0 = x0 + 10, lx1 = x1 - 38, ly0 = -60, ly1 = 60;
+    const L = [p(lx0, ly0, dz + 0.03), p(lx1, ly0, dz + 0.03), p(lx1, ly1, dz + 0.03), p(lx0, ly1, dz + 0.03)];
+    poly(ctx, L.map((v) => [v.x, v.y]));
+    ctx.fillStyle = 'rgba(8,22,29,0.92)';
+    ctx.fill();
+    ctx.setLineDash([9, 7]);
+    ctx.strokeStyle = 'rgba(95,251,241,0.75)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // landing chevrons
+    ctx.strokeStyle = 'rgba(255,180,71,0.8)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 4; i++) {
+      const lxp = lx0 + 13 + i * 17;
+      const a = p(lxp, -34, dz + 0.05);
+      const b = p(lxp + 10, 0, dz + 0.05);
+      const c = p(lxp, 34, dz + 0.05);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+    }
+    const deckMid = p((lx0 + lx1) / 2, 0, dz + 0.08);
+    ctx.font = `700 14px ${FONT_MONO}`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(95,251,241,0.9)';
+    ctx.fillText('LANDING DECK', deckMid.x, deckMid.y);
+    ctx.font = `600 9px ${FONT_MONO}`;
+    ctx.fillStyle = 'rgba(255,180,71,0.75)';
+    ctx.fillText('M/V NIGHT TIDE // OAKLAND', deckMid.x, deckMid.y + 12);
+
+    // deck containers / superstructure
+    const boxes = [
+      [x0 + 8, -116, x0 + 34, -70, 3.8, '#2a1734'],
+      [x0 + 40, -116, x0 + 66, -70, 4.4, '#12313a'],
+      [x0 + 72, -116, x0 + 98, -70, 3.4, '#34241a'],
+      [x0 + 8, 70, x0 + 34, 116, 3.2, '#38201a'],
+      [x0 + 40, 70, x0 + 66, 116, 4.8, '#1b263f'],
+      [x0 + 72, 70, x0 + 98, 116, 4.0, '#16322c'],
+    ];
+    for (const b of boxes) this.drawBoatBox(b[0], b[1], b[2], b[3], dz, dz + b[4], b[5]);
+    // bridge tower
+    this.drawBoatBox(x1 - 34, -50, x1 - 8, 50, dz, dz + 9.5, '#16232d');
+    const bridge = p(x1 - 21, 0, dz + 12.5);
+    ctx.fillStyle = 'rgba(95,251,241,0.9)';
+    ctx.font = `700 10px ${FONT_MONO}`;
+    ctx.fillText('ESCAPE', bridge.x, bridge.y);
+
+    // rails and neon trim
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(95,251,241,0.8)';
+    ctx.lineWidth = 2;
+    const railY = hy - 8;
+    const r1 = p(x0 + 4, -railY, dz + 3.3);
+    const r2 = p(x1 - 4, -railY, dz + 3.3);
+    ctx.beginPath(); ctx.moveTo(r1.x, r1.y); ctx.lineTo(r2.x, r2.y); ctx.stroke();
+    const r3 = p(x0 + 4, railY, dz + 3.3);
+    const r4 = p(x1 - 4, railY, dz + 3.3);
+    ctx.beginPath(); ctx.moveTo(r3.x, r3.y); ctx.lineTo(r4.x, r4.y); ctx.stroke();
+    for (let i = 0; i < 14; i++) {
+      const wx = x0 + 8 + i * ((x1 - x0 - 16) / 13);
+      for (const wy of [-railY, railY]) {
+        const b = p(wx, wy, dz);
+        const t = p(wx, wy, dz + 3.3);
+        ctx.strokeStyle = 'rgba(95,251,241,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(t.x, t.y); ctx.stroke();
+      }
+    }
+    // bow marker lights
+    for (const yy of [-hy + 3, hy - 3]) {
+      const light = p(x0 + 2, yy, dz + 4);
+      ctx.fillStyle = 'rgba(255,180,71,0.95)';
+      ctx.beginPath(); ctx.arc(light.x, light.y, 2.5, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawBoatBox(x0, y0, x1, y1, z0, z1, color) {
+    const ctx = this.ctx;
+    const p = (x, y, z) => this.worldToScreen(x, y, z);
+    const a0 = p(x0, y0, z0), b0 = p(x1, y0, z0), c0 = p(x1, y1, z0), d0 = p(x0, y1, z0);
+    const a1 = p(x0, y0, z1), b1 = p(x1, y0, z1), c1 = p(x1, y1, z1), d1 = p(x0, y1, z1);
+    // side faces
+    const faces = [
+      [[a0, b0, b1, a1], '#0b141c'],
+      [[b0, c0, c1, b1], '#101c26'],
+      [[c0, d0, d1, c1], '#0d1821'],
+      [[d0, a0, a1, d1], '#14212b'],
+    ];
+    for (const [pts, shade] of faces) {
+      poly(ctx, pts.map((v) => [v.x, v.y]));
+      ctx.fillStyle = shade;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(140,200,220,0.12)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    poly(ctx, [[a1.x, a1.y], [b1.x, b1.y], [c1.x, c1.y], [d1.x, d1.y]]);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(160,230,245,0.3)';
+    ctx.stroke();
+    // container ribs
+    ctx.strokeStyle = 'rgba(180,240,255,0.1)';
+    for (let i = 1; i < 4; i++) {
+      const xx = x0 + (x1 - x0) * (i / 4);
+      const q1 = p(xx, y0, z0 + 0.5);
+      const q2 = p(xx, y0, z1 - 0.3);
+      ctx.beginPath(); ctx.moveTo(q1.x, q1.y); ctx.lineTo(q2.x, q2.y); ctx.stroke();
+    }
+  }
+
+  drawSlowMo(game) {
+    if (!game.slowMo || game.slowMo <= 0) return;
+    const ctx = this.ctx;
+    const w = this.width, h = this.height;
+    const a = Math.min(1, game.slowMo * 1.6);
+    ctx.save();
+    const g = ctx.createRadialGradient(w * 0.5, h * 0.52, h * 0.1, w * 0.5, h * 0.52, h * 0.86);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `rgba(40,220,255,${0.15 * a})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(190,255,255,${0.13 * a})`;
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 26; i++) {
+      const ang = (i / 26) * TAU + this.time * 0.12;
+      const r0 = h * 0.18 + (i * 37) % 120;
+      const r1 = r0 + 90 + (i * 19) % 120;
+      ctx.beginPath();
+      ctx.moveTo(w / 2 + Math.cos(ang) * r0, h * 0.52 + Math.sin(ang) * r0);
+      ctx.lineTo(w / 2 + Math.cos(ang) * r1, h * 0.52 + Math.sin(ang) * r1);
       ctx.stroke();
     }
     ctx.restore();

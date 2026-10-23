@@ -1,4 +1,4 @@
-import { BLOCK, ROAD, WEAPONS, WEAPON_ORDER, COP, BLOCK as B } from './config.js';
+import { BLOCK, ROAD, WEAPONS, WEAPON_ORDER, COP, BAY } from './config.js';
 import {
   clamp, dist, randRange, pick, chance, segmentCircle, damp, TAU, formatNum,
 } from './utils.js';
@@ -23,9 +23,15 @@ export class Game {
     this.skids = new SkidMarks();
     this.bullets = [];
     this.pickups = [];
+    this.missionGates = BAY.gates.map((y, i) => ({
+      x: BAY.edgeX - 1, y,
+      label: ['NORTH', 'CENTRAL', 'SOUTH'][i],
+      route: i,
+    }));
 
     this.state = 'menu';
     this.paused = false;
+    this.autoAim = null;
     this.time = 0;
     this.menuTime = 0;
     this.heat = 1;
@@ -38,6 +44,11 @@ export class Game {
     this.best = this.loadBest();
     this.newBest = false;
     this.frame = 0;
+    this.slowMo = 0;
+    this.slowMoJump = false;
+    this.winTimer = 0;
+    this.escapeArmed = false;
+    this.lastSafe = { x: 0, y: -2 };
     this.hud.setBest(this.best);
 
     this.player.reset(0, -2);
@@ -73,8 +84,14 @@ export class Game {
     this.spawnTimer = 1.6;
     this.radioCooldown = 5;
     this.newBest = false;
+    this.slowMo = 0;
+    this.slowMoJump = false;
+    this.winTimer = 0;
+    this.escapeArmed = false;
+    this.lastSafe = { x: this.player.x, y: this.player.y };
     this.state = 'playing';
     this.paused = false;
+    this.autoAim = null;
     this.renderer.snapCamera(this.player);
     this.renderer.resetAmbience();
 
@@ -85,11 +102,13 @@ export class Game {
     this.spawnPickup(210, -2, 'weapon', { weapon: 'rocket' });
     this.spawnPickup(74, -2, 'boostpad', { angle: 0 });
     this.spawnPickup(120, -2, 'ramp', { angle: 0 });
+    this.setupMissionFeatures();
 
     this.hud.hideOverlays();
     this.hud.showHUD(true);
-    this.hud.alert('SOMA DISTRICT', 'SFPD PURSUIT INITIATED');
-    this.hud.toast('COLLECT WEAPONS • SHIFT TO BOOST • SPACE TO JUMP', 'info');
+    this.hud.alert('ESCAPE EAST', '3 BAY ROUTES // JACK THE BOAT');
+    this.hud.toast('FOLLOW A ROUTE TO THE BAY • HILLS AND RAMPS LAUNCH YOU', 'info');
+    this.hud.toast('THE ONLY WAY OUT IS THE BOAT', 'warn');
     this.audio.ui();
     this.audio.setEngine(0, false, true);
   }
@@ -106,7 +125,135 @@ export class Game {
     this.bullets.length = 0;
     this.pickups.length = 0;
     this.fx.reset();
+    this.slowMo = 0;
+    this.winTimer = 0;
+    this.escapeArmed = false;
     this.renderer.snapCamera(this.player);
+  }
+
+  setupMissionFeatures() {
+    const names = ['NORTH', 'CENTRAL', 'SOUTH'];
+    BAY.gates.forEach((y, i) => {
+      // natural launch hills, one per escape corridor
+      const hill = this.spawnPickup(360, y, 'hill', { angle: 0 });
+      if (hill) {
+        hill.mission = true;
+        hill.life = Infinity;
+        hill.label = `${names[i]} HILL`;
+      }
+      // final ramp at the end of each pier
+      const ramp = this.spawnPickup(831, y, 'ramp', { angle: 0 });
+      if (ramp) {
+        ramp.mission = true;
+        ramp.life = Infinity;
+        ramp.final = true;
+        ramp.label = `${names[i]} PIER RAMP`;
+      }
+    });
+  }
+
+  triggerSlowMo(seconds = 0.9, title = null, sub = '') {
+    this.slowMo = Math.max(this.slowMo, seconds);
+    if (this.slowMo <= seconds + 0.02) this.audio.slowMo();
+    if (title) this.hud.alert(title, sub);
+  }
+
+  checkJumpOverCops() {
+    const p = this.player;
+    if (this.state !== 'playing' || p.dead) return;
+    if (!p.airborne && !this.slowMoJump) return;
+    if (!p.airborne) { this.slowMoJump = false; return; }
+    if (p.z < 1.35 || this.slowMoJump) return;
+    let jumped = 0;
+    for (const c of this.police.cops) {
+      if (c.health <= 0 || c.type === 'drone') continue;
+      if (Math.hypot(c.x - p.x, c.y - p.y) < 4.8) jumped++;
+    }
+    for (const b of this.police.barriers) {
+      if (Math.hypot(b.x - p.x, b.y - p.y) < 5.2) jumped++;
+    }
+    if (jumped >= 2) {
+      this.slowMoJump = true;
+      this.triggerSlowMo(1.05, 'SLOW MOTION', `AIRBORNE OVER ${jumped} SFPD UNITS`);
+      this.addScore(80 * jumped, 'BLOCKADE JUMP');
+      p.addTurbo(12);
+      this.addShake(0.5);
+      this.fx.flash('#8ffcff', 0.18, 0.3);
+    }
+  }
+
+  checkWaterAndBoat(dt) {
+    const p = this.player;
+    if (p.dead) return;
+    // only the three bay gates and their piers arm the boat landing
+    if (this.world.isPier(p.x, p.y)) {
+      this.escapeArmed = true;
+    } else if (!p.airborne && !this.world.isWater(p.x, p.y) && !this.world.onBoat(p.x, p.y)) {
+      this.escapeArmed = false;
+    }
+    if (this.world.isWater(p.x, p.y) && p.z < 1.1) {
+      p.x = this.lastSafe.x;
+      p.y = this.lastSafe.y;
+      p.z = 0;
+      p.vz = 0;
+      p.airborne = false;
+      p.vx *= 0.18;
+      p.vy *= 0.18;
+      if (p.wallCd <= 0) {
+        p.wallCd = 0.9;
+        p.damage(4, this);
+        this.hud.toast('SEAWALL — USE ONE OF THE 3 BAY GATES', 'warn');
+        this.fx.ring(p.x, p.y, 3, '#ffb347');
+        this.audio.impact(1);
+      }
+      return;
+    }
+    if (!this.world.isWater(p.x, p.y) && !p.airborne && p.z < 0.6 && !this.world.onBoat(p.x, p.y)) {
+      this.lastSafe.x = p.x;
+      this.lastSafe.y = p.y;
+    }
+    if (this.world.onBoat(p.x, p.y) && p.z <= BAY.deckZ + 0.35) {
+      if (this.escapeArmed) {
+        p.z = BAY.deckZ;
+        p.vz = 0;
+        p.airborne = false;
+        this.win();
+      } else {
+        p.x = this.lastSafe.x;
+        p.y = this.lastSafe.y;
+        p.z = 0;
+        p.vz = 0;
+        p.airborne = false;
+        p.vx *= 0.2;
+        p.vy *= 0.2;
+        this.hud.toast('OFF-ROUTE — REACH THE BOAT VIA A CYAN GATE', 'warn');
+      }
+    }
+  }
+
+  win() {
+    if (this.state !== 'playing') return;
+    this.state = 'won';
+    this.winTimer = 2.8;
+    this.slowMo = 0.9;
+    this.addScore(5000, 'ESCAPED');
+    this.player.vx = 0;
+    this.player.vy = 0;
+    this.player.vz = 0;
+    this.player.forwardSpeed = 0;
+    this.player.lateralSpeed = 0;
+    this.player.speed = 0;
+    this.player.boosting = false;
+    this.saveBest();
+    this.fx.flash('#5ffbf1', 0.45, 0.7);
+    this.fx.ring(this.player.x, this.player.y, 12, '#5ffbf1');
+    this.addShake(1.4);
+    this.hud.alert('BOAT SECURED', 'SFPD CANNOT FOLLOW // RUN COMPLETE');
+    this.hud.toast('YOU MADE THE BOAT — ESCAPE CONFIRMED', 'good');
+    this.audio.setEngine(0, false, false);
+    this.audio.setSiren(0);
+    this.audio.setBoost(false);
+    this.audio.ui();
   }
 
   togglePause() {
@@ -146,6 +293,20 @@ export class Game {
       return;
     }
 
+    if (this.state === 'won') {
+      this.slowMo = Math.max(0, this.slowMo - dt);
+      this.fx.update(dt);
+      this.skids.update(dt);
+      this.winTimer -= dt;
+      this.hud.update(this);
+      if (this.winTimer <= 0) {
+        this.state = 'over';
+        this.slowMo = 0;
+        this.hud.showGameOver(this.stats(), true);
+      }
+      return;
+    }
+
     if (this.state === 'paused') {
       if (this.input.wasPressed('pause')) this.togglePause();
       return;
@@ -158,14 +319,19 @@ export class Game {
 
     const active = this.state === 'playing';
     const slow = this.state === 'dying' ? 0.35 : 1;
-    const adt = dt * slow;
+    const slowMo = this.slowMo > 0 ? 0.38 : 1;
+    const adt = dt * slow * slowMo;
+    this.slowMo = Math.max(0, this.slowMo - dt);
 
     this.time += active ? adt : 0;
 
     if (active || this.state === 'dying') {
       this.player.update(adt, this.input, this);
       this.resolvePlayerWorldCollision(adt);
+      this.checkWaterAndBoat(adt);
       this.police.update(adt, this);
+      this.checkJumpOverCops();
+      this.autoAim = active ? this.getAutoAimTarget(WEAPONS[this.player.weapon]) : null;
       this.updateBullets(adt);
       if (active) {
         this.updatePickups(adt);
@@ -181,6 +347,7 @@ export class Game {
       this.deathTimer += dt;
       if (this.deathTimer > 2.2) {
         this.state = 'over';
+        this.slowMo = 0;
         this.saveBest();
         this.hud.showGameOver(this.stats());
         this.audio.setEngine(0, false, false);
@@ -189,7 +356,7 @@ export class Game {
       }
     }
 
-    if (this.state === 'playing' || this.state === 'dying') {
+    if (this.state === 'playing' || this.state === 'dying' || this.state === 'won') {
       this.hud.update(this);
     }
   }
@@ -285,38 +452,39 @@ export class Game {
   }
 
   // ── targeting ─────────────────────────────────────────────────────────
-  getAimPoint() {
+  // Automatic weapon lock: the car's computer picks the most immediate
+  // police threat in range and leads the shot. The player never aims.
+  getAutoAimTarget(def = WEAPONS[this.player.weapon]) {
     const p = this.player;
-    if (!this.renderer) return { x: p.x + Math.cos(p.heading) * 30, y: p.y + Math.sin(p.heading) * 30 };
-    return this.renderer.screenToWorld(this.input.mouse.x, this.input.mouse.y);
-  }
-
-  findAimAssist(px, py, angle, maxAngle, maxDist) {
+    const bulletSpeed = Math.max(60, def?.speed || 150);
+    const range = Math.max(34, bulletSpeed * (def?.life || 0.7) * 0.95);
+    const hx = Math.cos(p.heading), hy = Math.sin(p.heading);
     let best = null;
     let bestScore = Infinity;
-    const mouse = this.input.mouse;
+
+    const consider = (x, y, vx, vy, z, isAir, ref, kind) => {
+      const d = dist(p.x, p.y, x, y);
+      if (d > range) return;
+      const fwd = d > 0.01 ? ((x - p.x) * hx + (y - p.y) * hy) / d : 1;
+      // prefer close targets, with a mild bonus for ones in the windscreen
+      const score = d * (1.18 - 0.22 * clamp(fwd, -1, 1));
+      if (score >= bestScore) return;
+      const lead = Math.min(0.9, d / bulletSpeed);
+      bestScore = score;
+      best = {
+        x: x + vx * lead, y: y + vy * lead, z, isAir,
+        ref, kind, lead, dist: d,
+      };
+    };
+
     for (const c of this.police.cops) {
-      const d = dist(px, py, c.x, c.y);
-      if (d > maxDist) continue;
-      const a = Math.atan2(c.y - py, c.x - px);
-      let diff = Math.abs(((a - angle + Math.PI * 3) % TAU) - Math.PI);
-      if (diff > maxAngle) continue;
-      const score = diff * 90 + d * 0.05;
-      if (score < bestScore) {
-        bestScore = score;
-        best = { x: c.x, y: c.y, z: c.type === 'drone' ? c.z : 0.9, isAir: c.type === 'drone', ref: c, kind: 'cop' };
-      }
+      if (c.health <= 0) continue;
+      consider(c.x, c.y, c.vx || 0, c.vy || 0,
+        c.type === 'drone' ? c.z : 0.9, c.type === 'drone', c, 'cop');
     }
     for (const h of this.police.helicopters) {
-      const s = this.renderer.worldToScreen(h.x, h.y, h.z);
-      const md = Math.hypot(s.x - mouse.x, s.y - mouse.y);
-      if (md < 80) {
-        const score = md * 0.5 - 50;
-        if (score < bestScore) {
-          bestScore = score;
-          best = { x: h.x, y: h.y, z: h.z, isAir: true, ref: h, kind: 'heli' };
-        }
-      }
+      if (h.health <= 0) continue;
+      consider(h.x, h.y, h.vx || 0, h.vy || 0, h.z, true, h, 'heli');
     }
     return best;
   }
@@ -469,6 +637,7 @@ export class Game {
 
   // ── pickups ───────────────────────────────────────────────────────────
   spawnPickup(x, y, kind, extra = {}) {
+    if (this.world.isWater(x, y) || this.world.onBoat(x, y)) return null;
     if (!this.world.isClear(x, y, 2.2)) return null;
     const p = {
       id: ++this._pickupId || (this._pickupId = 1),
@@ -499,7 +668,8 @@ export class Game {
   updatePickups(dt) {
     const p = this.player;
     this.spawnTimer -= dt;
-    const groundCount = this.pickups.filter((q) => q.kind !== 'ramp' && q.kind !== 'boostpad').length;
+    const groundCount = this.pickups.filter((q) =>
+      q.kind !== 'ramp' && q.kind !== 'boostpad' && q.kind !== 'hill' && !q.mission).length;
     if (groundCount < 8 && this.spawnTimer <= 0) {
       this.spawnTimer = rand(1.5, 3.4);
       const r = Math.random();
@@ -511,7 +681,7 @@ export class Game {
       else if (r < 0.84) kind = 'boostpad';
       else if (r < 0.9) kind = 'ramp';
       const spot = this.randomPickupSpot(kind === 'ramp' || kind === 'boostpad' ? 80 : 45, 170);
-      if (spot) {
+      if (spot && !this.world.isWater(spot.x, spot.y) && !this.world.onBoat(spot.x, spot.y)) {
         let weapon = null;
         if (kind === 'weapon') {
           const missing = WEAPON_ORDER.filter((id) => !(p.owned[id] > 0));
@@ -527,14 +697,37 @@ export class Game {
       q.bob += dt * 2.4;
       q.life -= dt;
       const d = dist(p.x, p.y, q.x, q.y);
+      q.cd = Math.max(0, (q.cd || 0) - dt);
+      if (q.kind === 'hill') {
+        // cresting a hill at speed throws the car without spending turbo
+        if (!q.mission && q.life <= 0) q.dead = true;
+        if (q.cd <= 0 && !p.airborne && p.z < 0.6 &&
+            Math.abs(p.x - q.x) < 4.6 && Math.abs(p.y - q.y) < 9.5 && p.speed > 18) {
+          q.cd = 3.2;
+          p.z = 0.3;
+          p.vz = 10.5 + clamp(p.speed * 0.075, 0, 6.5);
+          p.airborne = true;
+          p.airTime = 0;
+          p.flipAngle = 0;
+          p.flipDone = false;
+          p.bumpCombo(this, 1);
+          this.fx.jumpJet(p.x, p.y, p.heading);
+          this.fx.ring(p.x, p.y, 5, '#7dffc0');
+          this.audio.jump();
+          this.addShake(0.7);
+          this.hud.toast('HILL LAUNCH — CLEAR THE BLOCKADE', 'good');
+        }
+        continue;
+      }
       if (q.kind === 'ramp' || q.kind === 'boostpad') {
         const inX = Math.abs(p.x - q.x) < 3.4;
         const inY = Math.abs(p.y - q.y) < 5.2;
         const angleOk = q.kind === 'boostpad'
           ? (Math.cos(q.angle) * Math.cos(p.heading) + Math.sin(q.angle) * Math.sin(p.heading)) > 0.1
           : true;
-        if (inX && inY && p.z < 0.4 && angleOk) {
-          q.dead = true;
+        if (inX && inY && p.z < 0.4 && angleOk && q.cd <= 0) {
+          if (q.mission) q.cd = 2.8;
+          else q.dead = true;
           if (q.kind === 'boostpad') {
             p.vx += Math.cos(q.angle) * 16;
             p.vy += Math.sin(q.angle) * 16;
@@ -545,17 +738,26 @@ export class Game {
             this.audio.pickup('turbo');
           } else {
             p.z = 0.15;
-            p.vz = 13.2;
+            p.vz = q.final ? 14.6 : 13.2;
             p.airborne = true;
             p.airTime = 0;
+            p.flipAngle = 0;
+            p.flipDone = false;
             p.bumpCombo(this, 1);
             this.fx.jumpJet(p.x, p.y, p.heading);
             this.audio.jump();
             this.addShake(0.8);
-            this.hud.toast('RAMP — FULL SEND', 'good');
+            if (q.final) {
+              this.escapeArmed = true;
+              this.triggerSlowMo(1.25, 'FINAL JUMP', 'HIT THE BOAT DECK');
+              this.hud.toast('BOAT JUMP — DO NOT LIFT OFF THE THROTTLE', 'warn');
+              this.fx.ring(p.x, p.y, 7, '#5ffbf1');
+            } else {
+              this.hud.toast('RAMP — FULL SEND', 'good');
+            }
           }
         }
-        if (q.life <= 0) q.dead = true;
+        if (!q.mission && q.life <= 0) q.dead = true;
         continue;
       }
       if (d < 4.2 && p.z < 2.2) {
@@ -563,7 +765,7 @@ export class Game {
       }
       if (q.life <= 0) q.dead = true;
     }
-    this.pickups = this.pickups.filter((q) => !q.dead && dist(q.x, q.y, p.x, p.y) < 260);
+    this.pickups = this.pickups.filter((q) => !q.dead && (q.mission || dist(q.x, q.y, p.x, p.y) < 260));
   }
 
   collectPickup(q) {

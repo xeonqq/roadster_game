@@ -392,20 +392,23 @@ export class Player {
     }
     this.fireCooldown = 1 / def.rate;
     this.owned[this.weapon] = ammo - 1;
+
+    // fire-control computer picks and leads the target; no player aiming
+    const target = game.getAutoAimTarget(def);
+    if (!target) {
+      this.owned[this.weapon] = ammo;
+      this.fireCooldown = 0.12;
+      return;
+    }
     this.muzzleFlash = 1;
     this.recoil = 1;
 
-    const aim = game.getAimPoint();
-    let angle = Math.atan2(aim.y - this.y, aim.x - this.x);
-    // soft aim assist toward the nearest cruiser near the cursor ray
-    const assist = game.findAimAssist(this.x, this.y, angle, 0.19, 145);
-    if (assist) angle = Math.atan2(assist.y - this.y, assist.x - this.x);
-
-    const fx = Math.cos(this.heading), fy = Math.sin(this.heading);
-    const sx = this.x + fx * 2.1;
-    const sy = this.y + fy * 2.1;
+    const aimAngle = Math.atan2(target.y - this.y, target.x - this.x);
+    const sx = this.x + Math.cos(aimAngle) * 1.9;
+    const sy = this.y + Math.sin(aimAngle) * 1.9;
+    const angle = Math.atan2(target.y - sy, target.x - sx);
     const count = def.pellets || 1;
-    const shotZ = assist && assist.isAir ? assist.z : this.z + 0.9;
+    const shotZ = target.isAir ? target.z : this.z + 0.9;
     for (let i = 0; i < count; i++) {
       const spread = (Math.random() * 2 - 1) * def.spread;
       const a = angle + spread;
@@ -413,11 +416,11 @@ export class Player {
       game.spawnBullet({
         x: sx, y: sy, z: shotZ,
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-        life: assist && assist.isAir ? Math.max(def.life, 1.15) : def.life,
+        life: target.isAir ? Math.max(def.life, 1.15) : def.life,
         damage: def.damage, owner: 'player',
         weapon: def, pierce: def.pierce || 0, splash: def.splash || 0,
         emp: !!def.emp, color: def.color, size: def.id === 'rocket' ? 1.5 : def.id === 'rail' ? 0.9 : 0.7,
-        angle: a, air: !!(assist && assist.isAir),
+        angle: a, air: !!target.isAir,
       });
     }
     // muzzle particles + light

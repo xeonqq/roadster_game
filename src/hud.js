@@ -1,4 +1,4 @@
-import { WEAPONS, WEAPON_ORDER, BLOCK, ROAD } from './config.js';
+import { WEAPONS, WEAPON_ORDER, BLOCK, ROAD, BAY } from './config.js';
 import { clamp, formatNum, pad2, TAU } from './utils.js';
 
 const $ = (id) => document.getElementById(id);
@@ -33,6 +33,8 @@ export class HUD {
       finalScore: $('finalScore'), finalBest: $('finalBest'), finalDistance: $('finalDistance'),
       finalSpeed: $('finalSpeed'), finalKills: $('finalKills'), finalCombo: $('finalCombo'),
       finalTime: $('finalTime'), finalHeat: $('finalHeat'), newBest: $('newBest'),
+      overEyebrow: $('overEyebrow'), overTitle: $('overTitle'),
+      objectiveDist: $('objectiveDist'), objectiveHint: $('objectiveHint'),
       loading: $('loading'), startBtn: $('startBtn'), resumeBtn: $('resumeBtn'),
       restartBtn: $('restartBtn'), restartBtn2: $('restartBtn2'),
       menuBtn: $('menuBtn'), menuBtn2: $('menuBtn2'),
@@ -86,6 +88,7 @@ export class HUD {
   }
 
   showMenu(best) {
+    this.clearTransient();
     this.refs.menu.classList.remove('hidden');
     this.refs.pause.classList.add('hidden');
     this.refs.gameover.classList.add('hidden');
@@ -96,7 +99,19 @@ export class HUD {
     document.body.classList.add('in-menu');
   }
 
+  clearTransient() {
+    this.refs.toasts.innerHTML = '';
+    this.refs.killFeed.innerHTML = '';
+    this.refs.alertBanner.classList.remove('show');
+    this.refs.radio.classList.remove('show');
+    this.refs.crosshair.classList.add('hidden');
+    this.refs.gameover.classList.remove('victory');
+    this.alertTimer = 0;
+    this.radioTimer = 0;
+  }
+
   hideOverlays() {
+    this.clearTransient();
     this.refs.menu.classList.add('hidden');
     this.refs.pause.classList.add('hidden');
     this.refs.gameover.classList.add('hidden');
@@ -116,9 +131,17 @@ export class HUD {
     }
   }
 
-  showGameOver(stats) {
+  showGameOver(stats, won = false) {
     this.showHUD(false);
     this.refs.gameover.classList.remove('hidden');
+    this.refs.gameover.classList.toggle('victory', won);
+    if (won) {
+      this.refs.overEyebrow.textContent = 'ESCAPE CONFIRMED // BAY REACHED';
+      this.refs.overTitle.textContent = 'ESCAPED';
+    } else {
+      this.refs.overEyebrow.textContent = 'SIGNAL LOST // CHASSIS CRITICAL';
+      this.refs.overTitle.textContent = 'WRECKED';
+    }
     this.refs.finalScore.textContent = formatNum(stats.score);
     this.refs.finalBest.textContent = formatNum(stats.best);
     this.refs.finalDistance.textContent = `${formatNum(stats.distance)} M`;
@@ -280,10 +303,41 @@ export class HUD {
     const gear = p.forwardSpeed < -0.5 ? 'R' : Math.abs(p.forwardSpeed) < 0.8 ? 'N' : p.boosting ? 'B' : 'D';
     if (this.last.gear !== gear) { this.last.gear = gear; r.gearLabel.textContent = gear; }
 
-    // crosshair follows mouse
-    const m = game.input.mouse;
-    r.crosshair.style.left = `${m.x}px`;
-    r.crosshair.style.top = `${m.y}px`;
+    // escape objective
+    if (game.missionGates && r.objectiveDist) {
+      const onBoat = game.world.onBoat(p.x, p.y);
+      const boatDist = onBoat || game.state === 'won' ? 0
+        : Math.max(0, Math.round(Math.hypot(BAY.finishX - p.x, BAY.finishY - p.y)));
+      if (this.last.boatDist !== boatDist) {
+        this.last.boatDist = boatDist;
+        r.objectiveDist.textContent = `${boatDist} M`;
+      }
+      let hint = '3 BAY ROUTES // BOAT';
+      if (onBoat || game.state === 'won') hint = 'BOAT SECURED // ESCAPE CONFIRMED';
+      else if (p.x > BAY.edgeX - 55) hint = 'PIER RAMP // JUMP THE BOAT';
+      else if (p.x > BAY.edgeX - 210) hint = 'HIT A CYAN BAY GATE';
+      if (this.last.objectiveHint !== hint) {
+        this.last.objectiveHint = hint;
+        r.objectiveHint.textContent = hint;
+      }
+    }
+
+    // fire-control reticle snaps to the automatic weapon lock
+    const lock = game.autoAim;
+    if (lock && game.state === 'playing') {
+      const t = lock.ref || lock;
+      const s = game.renderer.worldToScreen(t.x, t.y, lock.z ?? 0.9);
+      const onScreen = s.x > 8 && s.x < window.innerWidth - 8 && s.y > 8 && s.y < window.innerHeight - 8;
+      r.crosshair.classList.toggle('hidden', !onScreen);
+      r.crosshair.classList.toggle('locked', onScreen);
+      if (onScreen) {
+        r.crosshair.style.left = `${s.x}px`;
+        r.crosshair.style.top = `${s.y}px`;
+      }
+    } else {
+      r.crosshair.classList.add('hidden');
+      r.crosshair.classList.remove('locked');
+    }
 
     // timed UI
     if (this.alertTimer > 0) {
@@ -328,8 +382,10 @@ export class HUD {
         const x = C + (bx * BLOCK - p.x) * scale;
         const y = C + (by * BLOCK - p.y) * scale;
         const w = BLOCK * scale;
-        ctx.fillStyle = b.type === 'park' ? 'rgba(40,110,90,0.16)' : 'rgba(92,120,155,0.09)';
-        ctx.fillRect(x + ROAD * scale * 0.5, y + ROAD * scale * 0.5, w - ROAD * scale, w - ROAD * scale);
+        ctx.fillStyle = b.type === 'water' ? 'rgba(10,50,72,0.34)'
+          : b.type === 'park' ? 'rgba(40,110,90,0.16)' : 'rgba(92,120,155,0.09)';
+        if (b.type === 'water') ctx.fillRect(x, y, w, w);
+        else ctx.fillRect(x + ROAD * scale * 0.5, y + ROAD * scale * 0.5, w - ROAD * scale, w - ROAD * scale);
       }
     }
     // road grid
@@ -385,6 +441,38 @@ export class HUD {
       ctx.moveTo(6, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
+    }
+
+    // bay gates and boat
+    for (const gate of game.missionGates) {
+      const x = C + (gate.x - p.x) * scale, y = C + (gate.y - p.y) * scale;
+      if (x < -20 || x > S + 20 || y < -20 || y > S + 20) continue;
+      ctx.strokeStyle = 'rgba(95,251,241,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.stroke();
+      ctx.fillStyle = 'rgba(95,251,241,0.9)';
+      ctx.fillRect(x - 1, y - 3, 2, 6);
+    }
+    {
+      const x = C + (BAY.finishX - p.x) * scale, y = C + (BAY.finishY - p.y) * scale;
+      if (x > -30 && x < S + 30 && y > -30 && y < S + 30) {
+        ctx.fillStyle = 'rgba(255,180,71,0.9)';
+        ctx.fillRect(x - 8, y - 5, 16, 10);
+        ctx.fillStyle = '#041012';
+        ctx.font = '700 7px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('BOAT', x, y + 2.5);
+      }
+      // objective bearing arrow on the rim
+      const ang = Math.atan2(BAY.finishY - p.y, BAY.finishX - p.x);
+      ctx.save();
+      ctx.translate(C, C);
+      ctx.rotate(ang);
+      ctx.fillStyle = 'rgba(255,180,71,0.8)';
+      ctx.beginPath();
+      ctx.moveTo(C - 9, 0); ctx.lineTo(C - 24, -5); ctx.lineTo(C - 24, 5);
+      ctx.closePath(); ctx.fill();
       ctx.restore();
     }
 

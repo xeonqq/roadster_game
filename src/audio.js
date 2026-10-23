@@ -299,6 +299,12 @@ export class AudioEngine {
     this._tone({ f0: 300, f1: 300, dur: 0.12, type: 'square', gain: 0.045, delay: 0.18 });
   }
 
+  slowMo() {
+    this._noiseHit({ dur: 0.7, type: 'highpass', f0: 3400, f1: 180, q: 0.8, gain: 0.1 });
+    this._tone({ f0: 420, f1: 72, dur: 0.75, type: 'sawtooth', gain: 0.07 });
+    this._tone({ f0: 210, f1: 48, dur: 0.9, type: 'sine', gain: 0.09, delay: 0.04 });
+  }
+
   // ── music ───────────────────────────────────────────────────────────
   _schedule() {
     if (!this.ctx) return;

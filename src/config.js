@@ -89,6 +89,20 @@ export const COP = {
   },
 };
 
+// ── escape mission // the bay and the boat ───────────────────────────────
+export const BAY = {
+  edgeX: 768,
+  pierEnd: 840,
+  pierHalf: 7.5,
+  gates: [-128, 0, 128],
+  boatX0: 864,
+  boatX1: 984,
+  boatHalfY: 136,
+  deckZ: 1.8,
+  finishX: 920,
+  finishY: 0,
+};
+
 export const DISTRICTS = [
   'SOMA', 'MISSION BAY', 'FINANCIAL DISTRICT', 'TENDERLOIN', 'NOB HILL',
   'HAYES VALLEY', 'CASTRO', 'MARINA', 'RICHMOND', 'SUNSET', 'CHINATOWN',
