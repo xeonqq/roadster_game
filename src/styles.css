@@ -721,7 +721,8 @@ body.touch #touchUI { display: block; }
   width: 48px; height: 42px; font-size: 13px;
 }
 
-/* floating steering joystick: X = steer, shove up = boost, pull down = brake */
+/* two-level steering joystick: steer inside the ring, push through the
+   resistant band forward = boost, backward = drift */
 #joyZone {
   position: absolute;
   left: 0; bottom: 0;
@@ -741,6 +742,25 @@ body.touch #touchUI { display: block; }
   border-color: var(--cyan);
   box-shadow: 0 0 18px rgba(95, 251, 241, 0.28);
 }
+/* level-1 ring: crossing out of it against the resistance commits boost/drift */
+#joyRing {
+  position: absolute; left: 50%; top: 50%;
+  width: 62%; height: 62%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px dashed rgba(95, 251, 241, 0.28);
+  pointer-events: none;
+}
+#joyBase.boost {
+  border-color: var(--cyan);
+  box-shadow: 0 0 22px rgba(95, 251, 241, 0.45);
+  background: radial-gradient(circle, rgba(95, 251, 241, 0.14), rgba(8, 20, 30, 0.2));
+}
+#joyBase.drift {
+  border-color: var(--amber);
+  box-shadow: 0 0 22px rgba(255, 179, 71, 0.4);
+  background: radial-gradient(circle, rgba(255, 179, 71, 0.12), rgba(8, 20, 30, 0.2));
+}
 #joyKnob {
   position: absolute; left: 50%; top: 50%;
   width: 52px; height: 52px; margin: -26px;
@@ -749,13 +769,18 @@ body.touch #touchUI { display: block; }
   box-shadow: 0 0 14px rgba(95, 251, 241, 0.5);
   pointer-events: none;
 }
-#joyHint {
-  position: absolute; left: 26px; bottom: 152px;
-  font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.16em;
-  color: rgba(150, 220, 235, 0.55);
-  pointer-events: none;
-  white-space: nowrap;
-}
+
+/* ── mobile menu: keyboard lessons don't apply ──────────────────────────── */
+body.touch .controlCard { display: none; }
+
+/* ── compact vehicle panel: the full-size one buries the road ───────────── */
+body.touch .statusBlock { width: 205px; padding: 7px 10px 6px; }
+body.touch .panelTitle { font-size: 7px; margin-bottom: 4px; }
+body.touch .barRow { margin: 3px 0; gap: 6px; }
+body.touch .bar { height: 4px; }
+body.touch .turboBarRow .bar { height: 5px; }
+body.touch .barLabel { width: 44px; font-size: 7px; }
+body.touch .barRow b { font-size: 8px; width: 24px; }
 
 #rotateHint {
   display: none;

@@ -197,12 +197,11 @@ export class Player {
     }
 
     // touch mode drives with an always-on throttle; S/back or pulling the
-    // joystick down cuts it. Shoving the stick to the rim forward = boost.
-    const brake = input.isDown('back') || (input.axisY || 0) < -0.5 ? 1 : 0;
+    // joystick down cuts it. Shoving the stick through the outer band
+    // forward = boost, backward = drift.
+    const brake = input.isDown('back') || (input.axisY || 0) < -0.4 ? 1 : 0;
     const throttle = (input.isDown('forward') || (input.autoThrottle && !brake)) ? 1 : 0;
-    const stickMag = Math.hypot(input.axisX || 0, input.axisY || 0);
-    const wantsBoost = input.isDown('boost')
-      || (input.autoThrottle && stickMag > 0.95 && (input.axisY || 0) > 0.35);
+    const wantsBoost = input.isDown('boost') || (input.autoThrottle && (input.boostLevel || 0) === 1);
     // analog joystick merges with digital keys
     const steerTarget = clamp(
       (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0) + (input.axisX || 0),
@@ -211,7 +210,7 @@ export class Player {
     // smooth digital steering so taps don't snap the car sideways
     this.steer = damp(this.steer, steerTarget, 14, dt);
     const steer = this.steer;
-    const handbrake = input.isDown('handbrake');
+    const handbrake = input.isDown('handbrake') || (input.autoThrottle && (input.driftLevel || 0) === 1);
     this.handbraking = handbrake;
 
     // ── turbo abilities ────────────────────────────────────────────────

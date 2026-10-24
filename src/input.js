@@ -25,9 +25,12 @@ export class Input {
     this.anyKeyPressed = false;
     // set by the touch layer: phones drive with an always-on throttle + brake button
     this.autoThrottle = false;
-    // analog joystick axes (-1..1) and mobile automation flags; desktop stays 0/false
+    // analog joystick axes (-1..1), two-level joystick triggers, and mobile
+    // automation flags; desktop stays 0/false
     this.axisX = 0;
     this.axisY = 0;
+    this.boostLevel = 0;
+    this.driftLevel = 0;
     this.autoDrive = false;
     this._bind();
   }

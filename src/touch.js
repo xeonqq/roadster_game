@@ -1,10 +1,11 @@
 // on-screen controls for phones/tablets. The layout is deliberately lean:
-// a floating steering joystick on the left (X = steer, full-forward = boost,
-// pull down = brake), JUMP + FIRE on the right, and a small pause button.
-// Automated: throttle is always on, hard cornering drifts automatically, and
-// weapons auto-switch when dry (pre-existing in tryFire). Buttons carry
-// data-key attributes and inject real binding codes through Input.setVirtual,
-// so gameplay code stays keyboard-agnostic.
+// a two-level steering joystick on the left (X = steer, shove through the
+// resistant outer band = boost forward / drift backward, pull = brake),
+// JUMP + FIRE on the right, and a small pause button. Automated: throttle is
+// always on, hard cornering drifts automatically, and weapons auto-switch
+// when dry (pre-existing in tryFire). Buttons carry data-key attributes and
+// inject real binding codes through Input.setVirtual, so gameplay code stays
+// keyboard-agnostic.
 export function initTouch(input) {
   const coarse = matchMedia('(pointer: coarse)').matches;
   const touchApi = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -15,6 +16,10 @@ export function initTouch(input) {
   document.body.classList.add('touch');
   input.autoThrottle = true;
   input.autoDrive = true;
+
+  // the keyboard lesson has nothing to teach here
+  const enterHint = document.querySelector('.enterHint');
+  if (enterHint) enterHint.textContent = 'TAP TO START';
 
   const ui = document.getElementById('touchUI');
   if (ui) {
@@ -53,20 +58,38 @@ function initJoystick(input, ui) {
   const knob = ui.querySelector('#joyKnob');
   if (!zone || !base || !knob) return;
 
-  const RADIUS = 48;        // knob travel in px — full deflection
+  const RADIUS = 56;        // knob travel in px — full deflection (outer rim)
+  const LEVEL1 = 0.62;      // steering ring: inside = normal steering
+  const LEVEL2 = 0.74;      // resistant band crossed → boost/drift triggers
+  const RESIST = 0.55;      // knob travel through the band is slowed
   const DEADZONE = 0.22;    // ignore thumb jitter this close to center
   let pointerId = null;
+  let wasL2 = false;
 
   const setAxes = (dx, dy) => {
     const mag = Math.hypot(dx, dy);
-    const clamped = Math.min(1, mag / RADIUS);
+    const d = Math.min(1, mag / RADIUS); // deflection 0..1
     const ux = mag > 0.001 ? dx / mag : 0;
     const uy = mag > 0.001 ? dy / mag : 0;
-    // axisY is semantic: +1 = pushed forward/up on screen, -1 = pulled back/down
-    input.axisX = Math.abs(ux * clamped) > DEADZONE ? ux * clamped : 0;
-    input.axisY = Math.abs(uy * clamped) > DEADZONE ? -(uy * clamped) : 0;
-    knob.style.transform = `translate(${ux * clamped * RADIUS}px, ${uy * clamped * RADIUS}px)`;
-    base.classList.toggle('active', clamped > DEADZONE);
+
+    // semantic axes (axisY +1 = pushed forward). Steering stays analog; the
+    // whole deflection range steers even past the level ring.
+    input.axisX = Math.abs(ux * d) > DEADZONE ? ux * d : 0;
+    input.axisY = Math.abs(uy * d) > DEADZONE ? -uy * d : 0;
+
+    // two-level: crossing the resistant band commits an action by direction
+    const l2 = d > LEVEL2;
+    if (l2 && !wasL2 && navigator.vibrate) navigator.vibrate(10);
+    wasL2 = l2;
+    input.boostLevel = l2 && input.axisY > 0.3 ? 1 : 0;
+    input.driftLevel = l2 && input.axisY < -0.3 ? 1 : 0;
+    base.classList.toggle('boost', input.boostLevel === 1);
+    base.classList.toggle('drift', input.driftLevel === 1);
+
+    // knob visual: 1:1 inside the ring, heavier travel through the band
+    const knobD = d <= LEVEL1 ? d : LEVEL1 + (d - LEVEL1) * RESIST;
+    knob.style.transform = `translate(${ux * knobD * RADIUS}px, ${uy * knobD * RADIUS}px)`;
+    base.classList.toggle('active', d > DEADZONE);
   };
 
   const placeBase = (x, y, rect) => {
@@ -100,8 +123,11 @@ function initJoystick(input, ui) {
     pointerId = null;
     input.axisX = 0;
     input.axisY = 0;
+    input.boostLevel = 0;
+    input.driftLevel = 0;
+    wasL2 = false;
     knob.style.transform = 'translate(0px, 0px)';
-    base.classList.remove('active');
+    base.classList.remove('active', 'boost', 'drift');
   };
   zone.addEventListener('pointerup', release);
   zone.addEventListener('pointercancel', release);
