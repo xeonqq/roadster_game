@@ -3,6 +3,12 @@ import { clamp, formatNum, pad2, TAU } from './utils.js';
 
 const $ = (id) => document.getElementById(id);
 
+function compass(dx, dy) {
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return 'HERE';
+  const dirs = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+  return dirs[Math.round(Math.atan2(dy, dx) / (Math.PI / 4) + 8) % 8];
+}
+
 export class HUD {
   constructor() {
     this.game = null;
@@ -20,6 +26,7 @@ export class HUD {
       radio: $('radio'), radioText: $('radioText'),
       toasts: $('toasts'), killFeed: $('killFeed'),
       crosshair: $('crosshair'),
+      navGuide: $('navGuide'), navArrow: $('navArrow'), navName: $('navName'), navDist: $('navDist'),
       hpFill: $('hpFill'), hpVal: $('hpVal'), shieldFill: $('shieldFill'), shieldVal: $('shieldVal'),
       turboFill: $('turboFill'), turboVal: $('turboVal'),
       abilityJump: $('abilityJump'), abilityBoost: $('abilityBoost'), abilityDrift: $('abilityDrift'),
@@ -35,6 +42,7 @@ export class HUD {
       finalTime: $('finalTime'), finalHeat: $('finalHeat'), newBest: $('newBest'),
       overEyebrow: $('overEyebrow'), overTitle: $('overTitle'),
       objectiveDist: $('objectiveDist'), objectiveHint: $('objectiveHint'),
+      objectiveTag: $('objectiveTag'),
       loading: $('loading'), startBtn: $('startBtn'), resumeBtn: $('resumeBtn'),
       restartBtn: $('restartBtn'), restartBtn2: $('restartBtn2'),
       menuBtn: $('menuBtn'), menuBtn2: $('menuBtn2'),
@@ -105,6 +113,7 @@ export class HUD {
     this.refs.alertBanner.classList.remove('show');
     this.refs.radio.classList.remove('show');
     this.refs.crosshair.classList.add('hidden');
+    this.refs.navGuide.classList.add('hidden');
     this.refs.gameover.classList.remove('victory');
     this.alertTimer = 0;
     this.radioTimer = 0;
@@ -303,24 +312,47 @@ export class HUD {
     const gear = p.forwardSpeed < -0.5 ? 'R' : Math.abs(p.forwardSpeed) < 0.8 ? 'N' : p.boosting ? 'B' : 'D';
     if (this.last.gear !== gear) { this.last.gear = gear; r.gearLabel.textContent = gear; }
 
-    // escape objective
+    // escape objective: data cores first, then the bay and boat
     if (game.missionGates && r.objectiveDist) {
       const onBoat = game.world.onBoat(p.x, p.y);
-      const boatDist = onBoat || game.state === 'won' ? 0
-        : Math.max(0, Math.round(Math.hypot(BAY.finishX - p.x, BAY.finishY - p.y)));
-      if (this.last.boatDist !== boatDist) {
-        this.last.boatDist = boatDist;
-        r.objectiveDist.textContent = `${boatDist} M`;
+      const nextCore = !game.missionReady ? game.getNextMissionStop?.() : null;
+      let tag = 'ESCAPE';
+      let hint = 'DATA CORES // BOAT LOCKED';
+      let objectiveDist = Math.max(0, Math.round(Math.hypot(BAY.finishX - p.x, BAY.finishY - p.y)));
+
+      if (nextCore) {
+        const d = Math.max(0, Math.round(Math.hypot(nextCore.x - p.x, nextCore.y - p.y)));
+        tag = `DATA ${game.missionCollected}/${game.missionTotal}`;
+        objectiveDist = d;
+        hint = `${nextCore.label} // ${compass(nextCore.x - p.x, nextCore.y - p.y)}`;
+      } else if (onBoat || game.state === 'won') {
+        hint = 'BOAT SECURED // ESCAPE CONFIRMED';
+        objectiveDist = 0;
+      } else if (p.x > BAY.edgeX - 55) {
+        hint = 'PIER RAMP // JUMP THE BOAT';
+      } else if (p.x > BAY.edgeX - 210) {
+        hint = 'HIT A CYAN BAY GATE';
+      } else {
+        hint = 'ALL CORES SECURED // BAY + BOAT';
       }
-      let hint = '3 BAY ROUTES // BOAT';
-      if (onBoat || game.state === 'won') hint = 'BOAT SECURED // ESCAPE CONFIRMED';
-      else if (p.x > BAY.edgeX - 55) hint = 'PIER RAMP // JUMP THE BOAT';
-      else if (p.x > BAY.edgeX - 210) hint = 'HIT A CYAN BAY GATE';
+
+      if (this.last.objectiveDist !== objectiveDist) {
+        this.last.objectiveDist = objectiveDist;
+        r.objectiveDist.textContent = `${objectiveDist} M`;
+      }
       if (this.last.objectiveHint !== hint) {
         this.last.objectiveHint = hint;
         r.objectiveHint.textContent = hint;
       }
+      if (this.last.objectiveTag !== tag) {
+        this.last.objectiveTag = tag;
+        r.objectiveTag.textContent = tag;
+        r.objectiveTag.style.background = nextCore ? '#ff2fb9' : '';
+        r.objectiveTag.style.color = nextCore ? '#12030d' : '';
+      }
     }
+
+    this.updateNavGuide(game);
 
     // fire-control reticle snaps to the automatic weapon lock
     const lock = game.autoAim;
@@ -354,6 +386,78 @@ export class HUD {
       this.mapTimer = 0.075;
       this.drawMinimap(game);
     }
+  }
+
+  updateNavGuide(game) {
+    const r = this.refs;
+    const p = game.player;
+    const onBoat = game.world.onBoat(p.x, p.y);
+    const hide = () => r.navGuide.classList.add('hidden');
+
+    if (!game.renderer || game.state === 'menu' || game.state === 'over' || game.state === 'won' || p.dead || onBoat) {
+      hide();
+      return;
+    }
+
+    let target = null;
+    let name = '';
+    let isBoat = false;
+    if (!game.missionReady) {
+      target = game.getNextMissionStop?.() || null;
+      if (target) name = target.label || 'DATA CORE';
+    } else {
+      target = { x: BAY.finishX, y: BAY.finishY };
+      name = 'ESCAPE BOAT';
+      isBoat = true;
+    }
+
+    if (!target) {
+      hide();
+      return;
+    }
+
+    // Use the live chase-camera yaw to derive the objective's screen bearing.
+    // Projecting a world-space delta keeps the arrow correct even when the
+    // target is behind the car or the camera is still easing after a turn.
+    const dxw = target.x - p.x;
+    const dyw = target.y - p.y;
+    const sy = game.renderer.sinYaw;
+    const cy = game.renderer.cosYaw;
+    let dx = -dxw * sy + dyw * cy;
+    let dy = -(dxw * cy + dyw * sy);
+    let len = Math.hypot(dx, dy);
+    if (len < 0.001) {
+      dx = 0;
+      dy = -1;
+      len = 1;
+    }
+    const ux = dx / len;
+    const uy = dy / len;
+    const ps = game.renderer.worldToScreen(p.x, p.y, 0.4);
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const radius = clamp(Math.min(w, h) * 0.115, 82, 112);
+    let ax = ps.x + ux * radius;
+    let ay = ps.y + uy * radius;
+    ax = clamp(ax, 88, Math.max(88, w - 88));
+    ay = clamp(ay, 102, Math.max(102, h - 190));
+
+    r.navGuide.style.left = `${ax.toFixed(1)}px`;
+    r.navGuide.style.top = `${ay.toFixed(1)}px`;
+    r.navArrow.style.transform = `rotate(${(Math.atan2(uy, ux) * 180 / Math.PI + 90).toFixed(1)}deg)`;
+    r.navGuide.classList.toggle('boat', isBoat);
+
+    const d = Math.max(0, Math.round(Math.hypot(target.x - p.x, target.y - p.y)));
+    if (this.last.navName !== name) {
+      this.last.navName = name;
+      r.navName.textContent = name;
+    }
+    if (this.last.navDist !== d) {
+      this.last.navDist = d;
+      r.navDist.textContent = `${d} M`;
+    }
+    r.navGuide.classList.remove('hidden');
   }
 
   drawMinimap(game) {
@@ -404,7 +508,7 @@ export class HUD {
 
     // pickups
     for (const q of game.pickups) {
-      if (q.kind === 'ramp' || q.kind === 'boostpad') continue;
+      if (q.kind === 'ramp' || q.kind === 'boostpad' || q.kind === 'mission') continue;
       const x = C + (q.x - p.x) * scale, y = C + (q.y - p.y) * scale;
       ctx.fillStyle = q.kind === 'weapon' ? '#ffb347' : q.kind === 'turbo' ? '#5ffbf1'
         : q.kind === 'repair' ? '#7dffc0' : q.kind === 'shield' ? '#5fa8ff' : '#ffd58a';
@@ -444,32 +548,86 @@ export class HUD {
       ctx.restore();
     }
 
+    // mission data cores
+    const nextCore = !game.missionReady ? game.getNextMissionStop?.() : null;
+    if (!game.missionReady && game.missionStops) {
+      for (const stop of game.missionStops) {
+        if (stop.collected) continue;
+        const dx = (stop.x - p.x) * scale;
+        const dy = (stop.y - p.y) * scale;
+        const len = Math.hypot(dx, dy);
+        const active = stop === nextCore;
+        if (len > C - 20) {
+          if (!active) continue;
+          const mx = C + (dx / len) * (C - 18);
+          const my = C + (dy / len) * (C - 18);
+          ctx.save();
+          ctx.translate(mx, my);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = 'rgba(255,75,190,0.95)';
+          ctx.fillRect(-4, -4, 8, 8);
+          ctx.restore();
+          continue;
+        }
+        const x = C + dx, y = C + dy;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = active ? 'rgba(255,95,200,0.98)' : 'rgba(255,95,200,0.45)';
+        ctx.fillRect(-4, -4, 8, 8);
+        ctx.restore();
+        if (active) {
+          ctx.strokeStyle = `rgba(255,120,210,${0.45 + 0.35 * Math.sin(performance.now() * 0.006)})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, 11, 0, TAU);
+          ctx.stroke();
+        }
+      }
+      if (nextCore) {
+        const dx = (nextCore.x - p.x) * scale;
+        const dy = (nextCore.y - p.y) * scale;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,90,200,0.28)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        ctx.moveTo(C, C);
+        ctx.lineTo(C + dx, C + dy);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
     // bay gates and boat
     for (const gate of game.missionGates) {
       const x = C + (gate.x - p.x) * scale, y = C + (gate.y - p.y) * scale;
       if (x < -20 || x > S + 20 || y < -20 || y > S + 20) continue;
-      ctx.strokeStyle = 'rgba(95,251,241,0.8)';
+      const open = game.missionReady;
+      ctx.strokeStyle = open ? 'rgba(95,251,241,0.8)' : 'rgba(255,69,93,0.55)';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.stroke();
-      ctx.fillStyle = 'rgba(95,251,241,0.9)';
+      ctx.fillStyle = open ? 'rgba(95,251,241,0.9)' : 'rgba(255,69,93,0.7)';
       ctx.fillRect(x - 1, y - 3, 2, 6);
     }
     {
       const x = C + (BAY.finishX - p.x) * scale, y = C + (BAY.finishY - p.y) * scale;
+      const open = game.missionReady || game.state === 'won';
       if (x > -30 && x < S + 30 && y > -30 && y < S + 30) {
-        ctx.fillStyle = 'rgba(255,180,71,0.9)';
+        ctx.fillStyle = open ? 'rgba(255,180,71,0.9)' : 'rgba(120,110,105,0.8)';
         ctx.fillRect(x - 8, y - 5, 16, 10);
         ctx.fillStyle = '#041012';
         ctx.font = '700 7px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('BOAT', x, y + 2.5);
+        ctx.fillText(open ? 'BOAT' : 'LOCK', x, y + 2.5);
       }
       // objective bearing arrow on the rim
-      const ang = Math.atan2(BAY.finishY - p.y, BAY.finishX - p.x);
+      const target = nextCore || { x: BAY.finishX, y: BAY.finishY };
+      const ang = Math.atan2(target.y - p.y, target.x - p.x);
       ctx.save();
       ctx.translate(C, C);
       ctx.rotate(ang);
-      ctx.fillStyle = 'rgba(255,180,71,0.8)';
+      ctx.fillStyle = nextCore ? 'rgba(255,90,200,0.9)' : 'rgba(255,180,71,0.8)';
       ctx.beginPath();
       ctx.moveTo(C - 9, 0); ctx.lineTo(C - 24, -5); ctx.lineTo(C - 24, 5);
       ctx.closePath(); ctx.fill();

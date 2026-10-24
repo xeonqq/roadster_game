@@ -22,7 +22,7 @@ Alternatively, serve the directory with any static server (the game is just `ind
 | `W` / `↑` | Accelerate |
 | `S` / `↓` | Brake / reverse |
 | `A` `D` / `←` `→` | Steer |
-| `C` / `Ctrl` | Handbrake drift (earns turbo) |
+| `K` / `Ctrl` | Handbrake drift (earns turbo) |
 | `Shift` | Rear jet boost (drains turbo) |
 | `Space` | Compressed-air jump (costs 26 turbo) |
 | `LMB` / `J` | Automatic fire-control lock (no manual aiming) |
@@ -34,7 +34,9 @@ Alternatively, serve the directory with any static server (the game is just `ind
 
 ## Features
 
-- **Escape mission** — the SFPD has sealed the grid; exactly three cyan bay gate routes lead to the waterfront. Pick a lane, hit the pier ramp and land on the cargo ship. Missing the deck puts you back on the pier.
+- **Escape mission** — the SFPD has sealed the grid. First steal four data cores from relay points across the city; the nav HUD and minimap guide you to each one. Once all four are secured the three cyan bay gate routes unlock. Pick a lane, hit the pier ramp and land on the cargo ship. Missing the deck puts you back on the pier, and the boat stays locked until the data heist is complete.
+- **True 3D hero car** — the Roadster is a lofted 3D shell with a glass canopy, cylindrical wheels, fender volumes and projected lighting. The 360 air flip rotates the actual mesh around its longitudinal axis, so the car keeps its volume through the whole roll instead of collapsing into a flat card.
+- **Winding objective route** — cores are placed off the straight eastbound corridor, so the run forces turns through SoMa, Mission Bay, Nob Hill and the Financial District instead of a single straight drive to the water.
 - **Hills and launch ramps** — natural hill crests throw the car without spending turbo; fixed pier ramps handle the final boat jump.
 - **Slow-motion action beats** — clearing two or more cruisers in one airborne pass triggers a slow-mo blockade-jump bonus, and the final boat jump gets its own cinematic time dilation.
 - **Two turbo abilities** fed by one shared reservoir:
@@ -72,7 +74,7 @@ src/styles.css      cyberpunk HUD and menu styling
 
 ## Notes
 
-- The escape objective is always east: look for the three cyan gate beacons at the bay and the orange landing chevrons on the ship. The minimap bearing arrow points to the boat.
+- The escape objective starts with the four city data cores; the on-screen navigation arrow, nav HUD and minimap bearing arrow all point to the nearest uncollected core. Once the boat unlocks, the objective is east: look for the three cyan gate beacons at the bay and the orange landing chevrons on the ship.
 - Weapons auto-lock the nearest police target in range and lead the shot; the player never aims manually.
 - Air targets (drones, helicopters) use elevated shots automatically.
 - The game is tuned for desktop keyboard + mouse. The mouse/`J` fires and the wheel swaps weapons.

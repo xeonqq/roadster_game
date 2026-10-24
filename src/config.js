@@ -103,6 +103,18 @@ export const BAY = {
   finishY: 0,
 };
 
+// Four city data cores have to be pulled before the boat unlocks. Their
+// positions are deliberately off the straight eastbound corridor so the run
+// becomes a tour through the grid rather than a single straight drag race.
+export const MISSION = {
+  stops: [
+    { x: 128, y: 128, label: 'SOMA RELAY' },
+    { x: 64, y: 256, label: 'MISSION CACHE' },
+    { x: -128, y: -256, label: 'NOB HILL UPLINK' },
+    { x: 320, y: -192, label: 'FINANCIAL NODE' },
+  ],
+};
+
 export const DISTRICTS = [
   'SOMA', 'MISSION BAY', 'FINANCIAL DISTRICT', 'TENDERLOIN', 'NOB HILL',
   'HAYES VALLEY', 'CASTRO', 'MARINA', 'RICHMOND', 'SUNSET', 'CHINATOWN',

@@ -5,7 +5,7 @@ const BINDINGS = {
   right: ['KeyD', 'ArrowRight'],
   jump: ['Space'],
   boost: ['ShiftLeft', 'ShiftRight'],
-  handbrake: ['KeyC', 'ControlLeft'],
+  handbrake: ['KeyK', 'ControlLeft'],
   fire: ['KeyJ'],
   switchWeapon: ['KeyQ', 'Tab'],
   mute: ['KeyM'],

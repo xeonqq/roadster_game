@@ -40,9 +40,9 @@
             <div id="heatStars" class="stars"></div>
           </div>
           <div class="objectiveRow">
-            <span class="objectiveTag">ESCAPE</span>
+            <span id="objectiveTag" class="objectiveTag">DATA 0/4</span>
             <b id="objectiveDist">0 M</b>
-            <span id="objectiveHint">3 BAY ROUTES // BOAT</span>
+            <span id="objectiveHint">DATA CORES // BOAT LOCKED</span>
           </div>
           <div id="alertBanner" class="alertBanner">
             <b id="alertTitle">ROADBLOCK AHEAD</b>
@@ -79,6 +79,14 @@
         <span class="chRing"></span>
       </div>
 
+      <div id="navGuide" class="navGuide hidden" aria-hidden="true">
+        <div class="navArrowFrame"><div id="navArrow" class="navArrow"></div></div>
+        <div class="navReadout">
+          <b id="navName">SOMA RELAY</b>
+          <span id="navDist">182 M</span>
+        </div>
+      </div>
+
       <footer class="hud-bottom">
         <div class="statusBlock panel">
           <div class="panelTitle"><span>VEHICLE STATUS</span><span class="tech">ROADSTER 2 // MK.II</span></div>
@@ -100,7 +108,7 @@
           <div class="abilityRow">
             <span class="ability" id="abilityJump"><kbd>SPACE</kbd> AIR JUMP <em>−26</em></span>
             <span class="ability" id="abilityBoost"><kbd>SHIFT</kbd> REAR BOOST <em>−27/s</em></span>
-            <span class="ability" id="abilityDrift"><kbd>C</kbd> DRIFT <em>+FUEL</em></span>
+            <span class="ability" id="abilityDrift"><kbd>K</kbd> DRIFT <em>+FUEL</em></span>
           </div>
         </div>
 
@@ -131,7 +139,7 @@
         <span><kbd>WASD</kbd> DRIVE</span>
         <span><kbd>SHIFT</kbd> BOOST</span>
         <span><kbd>SPACE</kbd> JUMP</span>
-        <span><kbd>C</kbd> DRIFT</span>
+        <span><kbd>K</kbd> DRIFT</span>
         <span><kbd>LMB / J</kbd> FIRE</span>
         <span><kbd>Q</kbd> WEAPON</span>
         <span><kbd>ESC</kbd> PAUSE</span>
@@ -145,14 +153,14 @@
           <div class="brandLine"><i></i> NIGHTCITY MOTORSPORT DIVISION <i></i></div>
           <h1 class="title"><span class="titleSmall">NEON</span><span class="titleBig" data-text="OVERDRIVE">OVERDRIVE</span></h1>
           <div class="subtitle">SAN FRANCISCO <span>//</span> 2088</div>
-          <p class="lede">A stolen <b>Tesla Roadster 2</b>. The SFPD has sealed the grid. There are exactly <b>three ways out</b>:
-            pick a bay gate, use the hills and ramps to jump the blockades, and put the Roadster on the escape boat before the city locks down.</p>
+          <p class="lede">A stolen <b>Tesla Roadster 2</b>. The SFPD has sealed the grid. Steal <b>four data cores</b> hidden across the city,
+            then pick a bay gate, use the hills and ramps to jump the blockades, and put the Roadster on the escape boat before the city locks down.</p>
         </div>
 
         <div class="menuFeatures">
-          <span>3 BAY ROUTES // ONE BOAT</span>
+          <span>4 DATA CORES // THEN THE BOAT</span>
+          <span>WINDING CITY ROUTE // NAV HUD</span>
           <span>HILLS, RAMPS &amp; SLOW-MO JUMPS</span>
-          <span>PROCEDURAL CYBER-SF</span>
           <span>5 SALVAGE WEAPONS</span>
           <span>ESCALATING HEAT</span>
         </div>
@@ -164,7 +172,7 @@
               <div><kbd>W A S D</kbd><span>THROTTLE / STEER</span></div>
               <div><kbd>SHIFT</kbd><span>REAR TURBO</span></div>
               <div><kbd>SPACE</kbd><span>AIR TURBO JUMP</span></div>
-              <div><kbd>C</kbd><span>HANDBRAKE DRIFT</span></div>
+              <div><kbd>K</kbd><span>HANDBRAKE DRIFT</span></div>
               <div><kbd>J / CLICK</kbd><span>AUTO-FIRE (AUTO-AIM)</span></div>
               <div><kbd>Q / WHEEL</kbd><span>SWAP WEAPON</span></div>
               <div><kbd>M</kbd><span>AUDIO MUTE</span></div>
@@ -174,7 +182,7 @@
               <div><b>SPACE</b> compressed air under the chassis — clears cars, roadblocks and spike strips.</div>
               <div><b>SHIFT</b> rear jet — enormous acceleration, burns turbo fast.</div>
               <div>Both burn the same reservoir. Fuel it by driving, drifting, near-misses and air time.</div>
-              <div><b>HILLS</b> launch you without turbo. Find a cyan bay gate, hit the pier ramp, land on the boat.</div>
+              <div><b>HILLS</b> launch you without turbo. Collect every data core to unlock the bay gates, then hit a pier ramp and land on the boat.</div>
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-import { BLOCK, ROAD, WEAPONS, WEAPON_ORDER, COP, BAY } from './config.js';
+import { BLOCK, ROAD, WEAPONS, WEAPON_ORDER, COP, BAY, MISSION } from './config.js';
 import {
   clamp, dist, randRange, pick, chance, segmentCircle, damp, TAU, formatNum,
 } from './utils.js';
@@ -28,6 +28,13 @@ export class Game {
       label: ['NORTH', 'CENTRAL', 'SOUTH'][i],
       route: i,
     }));
+    this.missionStops = MISSION.stops.map((s, i) => ({
+      ...s, id: i, collected: false,
+      district: '',
+    }));
+    this.missionTotal = this.missionStops.length;
+    this.missionCollected = 0;
+    this.missionReady = false;
 
     this.state = 'menu';
     this.paused = false;
@@ -103,12 +110,13 @@ export class Game {
     this.spawnPickup(74, -2, 'boostpad', { angle: 0 });
     this.spawnPickup(120, -2, 'ramp', { angle: 0 });
     this.setupMissionFeatures();
+    this.setupMissionStops();
 
     this.hud.hideOverlays();
     this.hud.showHUD(true);
-    this.hud.alert('ESCAPE EAST', '3 BAY ROUTES // JACK THE BOAT');
-    this.hud.toast('FOLLOW A ROUTE TO THE BAY • HILLS AND RAMPS LAUNCH YOU', 'info');
-    this.hud.toast('THE ONLY WAY OUT IS THE BOAT', 'warn');
+    this.hud.alert('CITY-WIDE DATA HEIST', `${this.missionTotal} DATA CORES // THEN THE BOAT`);
+    this.hud.toast('COLLECT ALL DATA CORES TO UNLOCK THE BOAT', 'warn');
+    this.hud.toast('NAV HUD MARKS EACH CORE — FOLLOW THE DIAMONDS', 'info');
     this.audio.ui();
     this.audio.setEngine(0, false, true);
   }
@@ -152,6 +160,70 @@ export class Game {
     });
   }
 
+  setupMissionStops() {
+    this.missionStops = MISSION.stops.map((s, i) => ({
+      ...s, id: i, collected: false,
+      district: this.world.districtAt(s.x, s.y),
+    }));
+    this.missionTotal = this.missionStops.length;
+    this.missionCollected = 0;
+    this.missionReady = false;
+
+    for (const stop of this.missionStops) {
+      const core = this.spawnPickup(stop.x, stop.y, 'mission');
+      if (!core) continue;
+      core.mission = true;
+      core.life = Infinity;
+      core.stopId = stop.id;
+      core.label = stop.label;
+      core.bob = stop.id * 1.7;
+    }
+  }
+
+  getNextMissionStop() {
+    const p = this.player;
+    let best = null;
+    let bestD = Infinity;
+    for (const stop of this.missionStops) {
+      if (stop.collected) continue;
+      const d = dist(p.x, p.y, stop.x, stop.y);
+      if (d < bestD) { bestD = d; best = stop; }
+    }
+    return best;
+  }
+
+  collectMissionCore(q) {
+    const stop = this.missionStops.find((s) => s.id === q.stopId);
+    if (!stop || stop.collected) return;
+    const p = this.player;
+    stop.collected = true;
+    this.missionCollected++;
+    this.addScore(650, 'DATA CORE');
+    p.addTurbo(24);
+    p.bumpCombo(this, 2);
+    this.fx.flash('#ff2fb9', 0.22, 0.35);
+    this.fx.ring(stop.x, stop.y, 8, '#ff2fb9');
+    this.fx.floatText(stop.x, stop.y, 3.5, 'CORE SECURED', '#ff9be0');
+
+    if (this.missionCollected >= this.missionTotal) {
+      this.missionReady = true;
+      this.hud.alert('BAY GATES UNLOCKED', 'ALL DATA CORES SECURED // GET TO THE BOAT');
+      this.hud.toast('BOAT ACCESS GRANTED — HIT A CYAN BAY GATE', 'good');
+      this.audio.alert();
+    } else {
+      const next = this.getNextMissionStop();
+      const left = this.missionTotal - this.missionCollected;
+      this.hud.alert('DATA CORE SECURED', `${this.missionCollected}/${this.missionTotal} // ${left} STILL ACTIVE`);
+      this.hud.toast(next
+        ? `NEXT CORE: ${next.label} — FOLLOW THE NAV DIAMOND`
+        : `ALL CORES SECURED — REACH THE BOAT`, 'good');
+    }
+  }
+
+  missionProgress() {
+    return `${this.missionCollected}/${this.missionTotal}`;
+  }
+
   triggerSlowMo(seconds = 0.9, title = null, sub = '') {
     this.slowMo = Math.max(this.slowMo, seconds);
     if (this.slowMo <= seconds + 0.02) this.audio.slowMo();
@@ -185,6 +257,22 @@ export class Game {
   checkWaterAndBoat(dt) {
     const p = this.player;
     if (p.dead) return;
+    // The bay gates are physically locked until the data heist is complete.
+    if (!this.missionReady && p.x > BAY.edgeX - 1.5 && this.world.isPier(p.x, p.y)) {
+      p.x = BAY.edgeX - 6;
+      p.z = 0;
+      p.vz = 0;
+      p.airborne = false;
+      if (p.vx > 0) p.vx = -Math.abs(p.vx) * 0.28;
+      p.vy *= 0.7;
+      if (p.wallCd <= 0) {
+        p.wallCd = 1;
+        this.hud.toast(`GATE LOCKED — SECURE DATA CORES ${this.missionProgress()}`, 'warn');
+        this.fx.ring(p.x, p.y, 4, '#ff455d');
+        this.audio.impact(0.8);
+      }
+      return;
+    }
     // only the three bay gates and their piers arm the boat landing
     if (this.world.isPier(p.x, p.y)) {
       this.escapeArmed = true;
@@ -202,7 +290,9 @@ export class Game {
       if (p.wallCd <= 0) {
         p.wallCd = 0.9;
         p.damage(4, this);
-        this.hud.toast('SEAWALL — USE ONE OF THE 3 BAY GATES', 'warn');
+        this.hud.toast(this.missionReady
+          ? 'SEAWALL — USE ONE OF THE 3 BAY GATES'
+          : `SEAWALL — BOAT LOCKED // DATA CORES ${this.missionProgress()}`, 'warn');
         this.fx.ring(p.x, p.y, 3, '#ffb347');
         this.audio.impact(1);
       }
@@ -213,7 +303,7 @@ export class Game {
       this.lastSafe.y = p.y;
     }
     if (this.world.onBoat(p.x, p.y) && p.z <= BAY.deckZ + 0.35) {
-      if (this.escapeArmed) {
+      if (this.escapeArmed && this.missionReady) {
         p.z = BAY.deckZ;
         p.vz = 0;
         p.airborne = false;
@@ -226,7 +316,11 @@ export class Game {
         p.airborne = false;
         p.vx *= 0.2;
         p.vy *= 0.2;
-        this.hud.toast('OFF-ROUTE — REACH THE BOAT VIA A CYAN GATE', 'warn');
+        if (!this.missionReady) {
+          this.hud.toast(`BOAT LOCKED — SECURE DATA CORES ${this.missionProgress()}`, 'warn');
+        } else {
+          this.hud.toast('OFF-ROUTE — REACH THE BOAT VIA A CYAN GATE', 'warn');
+        }
       }
     }
   }
@@ -774,6 +868,9 @@ export class Game {
     this.fx.ring(q.x, q.y, 5, '#bffcff');
     this.fx.sparks(q.x, q.y, 1.4, 10, '#8ffcff', 8);
     switch (q.kind) {
+      case 'mission':
+        this.collectMissionCore(q);
+        break;
       case 'weapon': {
         const id = q.weapon || pick(Math.random, WEAPON_ORDER);
         const def = WEAPONS[id];

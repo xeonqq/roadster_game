@@ -301,6 +301,66 @@ kbd {
 .chDot { position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; background: var(--cyan); border-radius: 50%; box-shadow: 0 0 6px var(--cyan); }
 .chRing { position: absolute; inset: 7px; border: 1px solid rgba(95,251,241,0.16); border-radius: 50%; }
 
+/* ── on-screen navigation arrow ──────────────────────────────────────── */
+.navGuide {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  pointer-events: none; z-index: 24;
+  will-change: left, top;
+}
+.navGuide.hidden { display: none; }
+.navArrowFrame {
+  width: 58px; height: 58px; display: grid; place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,47,185,0.22) 0%, rgba(255,47,185,0.05) 55%, transparent 70%);
+  border: 1px solid rgba(255,95,200,0.38);
+  box-shadow: 0 0 18px rgba(255,47,185,0.22), inset 0 0 14px rgba(255,47,185,0.12);
+  animation: navPulse 1.7s ease-in-out infinite;
+}
+.navArrow {
+  width: 31px; height: 42px; transform-origin: 50% 50%;
+  background: linear-gradient(180deg, #ffffff 0%, #ff9be0 28%, #ff2fb9 72%, rgba(255,47,185,0.35) 100%);
+  clip-path: polygon(50% 0, 100% 55%, 72% 55%, 72% 100%, 28% 100%, 28% 55%, 0 55%);
+  filter: drop-shadow(0 0 5px rgba(255,47,185,0.95)) drop-shadow(0 0 14px rgba(255,47,185,0.55));
+}
+.navReadout {
+  min-width: 104px; padding: 4px 10px 5px;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  background: linear-gradient(180deg, rgba(10,4,18,0.92), rgba(10,4,18,0.66));
+  border: 1px solid rgba(255,79,195,0.45);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  box-shadow: 0 0 14px rgba(255,47,185,0.16);
+}
+.navReadout b {
+  font-family: var(--font-display); font-size: 9px; letter-spacing: 0.12em;
+  color: #ffe1f7; white-space: nowrap;
+}
+.navReadout span {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em;
+  color: #ff7ed0; text-shadow: 0 0 8px rgba(255,47,185,0.6);
+}
+.navGuide.boat .navArrowFrame {
+  background: radial-gradient(circle, rgba(255,179,71,0.24) 0%, rgba(255,179,71,0.06) 55%, transparent 70%);
+  border-color: rgba(255,190,100,0.45);
+  box-shadow: 0 0 18px rgba(255,179,71,0.22), inset 0 0 14px rgba(255,179,71,0.12);
+  animation-name: navPulseBoat;
+}
+.navGuide.boat .navArrow {
+  background: linear-gradient(180deg, #fffbe8 0%, #ffd27a 28%, #ffb347 72%, rgba(255,179,71,0.35) 100%);
+  filter: drop-shadow(0 0 5px rgba(255,179,71,0.95)) drop-shadow(0 0 14px rgba(255,179,71,0.55));
+}
+.navGuide.boat .navReadout { border-color: rgba(255,179,71,0.5); }
+.navGuide.boat .navReadout span { color: #ffd083; text-shadow: 0 0 8px rgba(255,179,71,0.6); }
+@keyframes navPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(255,47,185,0.16), inset 0 0 12px rgba(255,47,185,0.1); }
+  50% { box-shadow: 0 0 24px rgba(255,47,185,0.32), inset 0 0 18px rgba(255,47,185,0.18); }
+}
+@keyframes navPulseBoat {
+  0%, 100% { box-shadow: 0 0 14px rgba(255,179,71,0.16), inset 0 0 12px rgba(255,179,71,0.1); }
+  50% { box-shadow: 0 0 24px rgba(255,179,71,0.32), inset 0 0 18px rgba(255,179,71,0.18); }
+}
+
 /* ── radio / toasts / feed ───────────────────────────────────────────── */
 .radio {
   position: absolute; left: 50%; bottom: 154px; transform: translate(-50%, 8px);
