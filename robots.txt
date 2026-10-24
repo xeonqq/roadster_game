@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://roadster-game.xeonqq.workers.dev/sitemap.xml
