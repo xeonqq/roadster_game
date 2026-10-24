@@ -12,13 +12,15 @@ export const BOOST_MIN = 6;
 // exhaust gas — throttle/boost/flip billow gas that shoves nearby ground units
 export const EXHAUST = {
   color: '#9fe8d8',
-  rate: 8,           // puffs per second at plain throttle
-  boostRate: 44,     // puffs per second while boosting
-  flipRate: 30,      // puffs per second mid-flip
-  throttleGas: 0.15, // push intensity at plain throttle
-  flipGas: 0.9,      // push intensity mid-flip
-  pushRadius: 18,    // world units the gas wash reaches
-  pushForce: 750,    // shove acceleration at point blank (scaled by intensity)
+  flipColor: '#f4faff', // flips vent a bright white plume
+  rate: 8,              // puffs per second at plain throttle
+  boostRate: 44,        // puffs per second while boosting
+  flipRate: 52,         // puffs per second mid-flip
+  throttleGas: 0.15,    // push intensity at plain throttle
+  flipGas: 1.4,         // push intensity mid-flip — the flip blast hurls cops
+  pushRadius: 18,       // world units the gas wash reaches
+  flipRadiusScale: 1.5, // flips blast a much wider cloud
+  pushForce: 750,       // shove acceleration at point blank (scaled by intensity)
 };
 
 export const PLAYER = {

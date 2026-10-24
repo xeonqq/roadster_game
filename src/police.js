@@ -284,8 +284,9 @@ export class PoliceForce {
 
     // exhaust wash: the suspect's gas plume shoves ground units back out of
     // the cloud — drones fly above it, heavies resist a little (mass)
-    if (player.gasIntensity > 0 && !def.flying && d < EXHAUST.pushRadius) {
-      const falloff = 1 - d / EXHAUST.pushRadius;
+    const gasRadius = player.gasRadius || 0;
+    if (player.gasIntensity > 0 && !def.flying && d < gasRadius) {
+      const falloff = 1 - d / gasRadius;
       const push = EXHAUST.pushForce * player.gasIntensity * falloff * falloff * (2.6 / def.radius) * dt;
       cop.vx -= (dx / (d || 1)) * push;
       cop.vy -= (dy / (d || 1)) * push;

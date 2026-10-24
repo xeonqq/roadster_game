@@ -123,7 +123,7 @@ export class FX {
   }
 
   // gas plume blown out the back of the roadster; power 0.4 idle-ish … 1.6 boost
-  exhaust(x, y, heading, power = 1) {
+  exhaust(x, y, heading, power = 1, color = EXHAUST.color) {
     const bx = Math.cos(heading), by = Math.sin(heading);
     this.add({
       type: 'smoke',
@@ -134,7 +134,7 @@ export class FX {
       vz: 0.8 + Math.random() * 1.6,
       life: (0.45 + Math.random() * 0.4) * (0.8 + power * 0.4), maxLife: 1.2,
       size: (1.8 + Math.random() * 2.2) * (0.7 + power * 0.6),
-      color: EXHAUST.color, drag: 1.8, grow: 4 + 5 * power,
+      color, drag: 1.8, grow: 4 + 5 * power,
     });
     if (power >= 1 && Math.random() < 0.35) {
       this.add({
