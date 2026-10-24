@@ -196,10 +196,18 @@ export class Player {
       return;
     }
 
-    // touch mode drives with an always-on throttle; S/back (or BRAKE button) cuts it
-    const throttle = (input.isDown('forward') || (input.autoThrottle && !input.isDown('back'))) ? 1 : 0;
-    const brake = input.isDown('back') ? 1 : 0;
-    const steerTarget = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
+    // touch mode drives with an always-on throttle; S/back or pulling the
+    // joystick down cuts it. Shoving the stick to the rim forward = boost.
+    const brake = input.isDown('back') || (input.axisY || 0) < -0.5 ? 1 : 0;
+    const throttle = (input.isDown('forward') || (input.autoThrottle && !brake)) ? 1 : 0;
+    const stickMag = Math.hypot(input.axisX || 0, input.axisY || 0);
+    const wantsBoost = input.isDown('boost')
+      || (input.autoThrottle && stickMag > 0.95 && (input.axisY || 0) > 0.35);
+    // analog joystick merges with digital keys
+    const steerTarget = clamp(
+      (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0) + (input.axisX || 0),
+      -1, 1,
+    );
     // smooth digital steering so taps don't snap the car sideways
     this.steer = damp(this.steer, steerTarget, 14, dt);
     const steer = this.steer;
@@ -227,7 +235,6 @@ export class Player {
       }
     }
 
-    const wantsBoost = input.isDown('boost');
     this.boosting = wantsBoost && this.turbo > BOOST_MIN && this.forwardSpeed > -2;
     if (this.boosting) {
       this.turbo = Math.max(0, this.turbo - BOOST_DRAIN * dt);
@@ -249,6 +256,10 @@ export class Player {
     // gentle natural drift when cornering at speed (handbrake gives the big slides)
     const cornering = Math.abs(steer) * clamp(speed / 55, 0, 1);
     if (!this.airborne && !handbrake) grip = lerp(grip, PLAYER.driftGrip, cornering * 0.4);
+    // mobile auto-drift: carving hard at speed loosens the rear without any button
+    if (input.autoDrive && !this.airborne && this.speed > 32 && Math.abs(steer) > 0.62) {
+      grip = lerp(grip, PLAYER.driftGrip, 0.55);
+    }
 
     this.heading += steer * turnRate * dt * dirSign;
     if (this.heading > Math.PI) this.heading -= TAU;

@@ -697,21 +697,11 @@ body.touch #touchUI { display: block; }
 }
 
 .tPad { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom)); pointer-events: none; }
-.tPadLeft {
-  left: calc(14px + env(safe-area-inset-left));
-  display: flex; flex-direction: column; gap: 10px;
-}
 .tPadRight {
   right: calc(14px + env(safe-area-inset-right));
-  display: flex; flex-direction: row; align-items: flex-end; gap: 10px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
 }
 .tCol { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
-.tSteerRow { display: flex; gap: 10px; }
-
-.tSteer { width: 78px; height: 78px; font-size: 20px; }
-.tBrake, .tDrift { width: 78px; height: 44px; }
-.tDrift { border-color: rgba(255, 179, 71, 0.45); color: #ffe8c0; }
-.tDrift.active { background: rgba(255, 179, 71, 0.28); border-color: var(--amber); box-shadow: 0 0 16px rgba(255, 179, 71, 0.3); }
 
 .tFire {
   width: 92px; height: 92px; font-size: 12px;
@@ -722,14 +712,49 @@ body.touch #touchUI { display: block; }
   border-color: var(--red);
   box-shadow: 0 0 18px rgba(255, 69, 93, 0.4);
 }
-.tJump, .tBoost { width: 92px; height: 56px; }
-.tSwap { width: 92px; height: 36px; font-size: 9px; }
+.tJump { width: 92px; height: 62px; }
 
 .tPause {
   position: absolute;
   bottom: calc(14px + env(safe-area-inset-bottom));
   left: 50%; transform: translateX(-50%);
   width: 48px; height: 42px; font-size: 13px;
+}
+
+/* floating steering joystick: X = steer, shove up = boost, pull down = brake */
+#joyZone {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 46%; height: 62%;
+  pointer-events: auto;
+  touch-action: none;
+}
+#joyBase {
+  position: absolute; left: 26px; bottom: 26px;
+  width: 118px; height: 118px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(8, 20, 30, 0.42), rgba(8, 20, 30, 0.18));
+  border: 1px solid rgba(95, 251, 241, 0.3);
+  backdrop-filter: blur(2px);
+}
+#joyBase.active {
+  border-color: var(--cyan);
+  box-shadow: 0 0 18px rgba(95, 251, 241, 0.28);
+}
+#joyKnob {
+  position: absolute; left: 50%; top: 50%;
+  width: 52px; height: 52px; margin: -26px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #c9fdf7, rgba(95, 251, 241, 0.75) 55%, rgba(42, 154, 157, 0.7));
+  box-shadow: 0 0 14px rgba(95, 251, 241, 0.5);
+  pointer-events: none;
+}
+#joyHint {
+  position: absolute; left: 26px; bottom: 152px;
+  font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.16em;
+  color: rgba(150, 220, 235, 0.55);
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 #rotateHint {
