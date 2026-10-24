@@ -1,0 +1,10 @@
+# Excluded from Workers static-asset upload (wrangler reads this from the assets dir).
+node_modules
+.git
+server.mjs
+package.json
+package-lock.json
+README.md
+wrangler.toml
+wrangler.jsonc
+.wrangler
