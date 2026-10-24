@@ -660,3 +660,100 @@ kbd {
   .titleBig { font-size: 54px; }
   .menuInner { padding-top: 14px; }
 }
+
+/* ── touch controls (shown when the touch layer flags body.touch) ──────── */
+body.touch { touch-action: none; overscroll-behavior: none; }
+body.touch .hintBar, body.touch .crosshair { display: none; }
+/* lift the bottom HUD panels above the thumb pads */
+body.touch .hud-bottom { bottom: 168px; }
+
+#touchUI {
+  display: none;
+  position: absolute; inset: 0;
+  z-index: 30; pointer-events: none;
+  font-family: var(--font-mono);
+}
+body.touch #touchUI { display: block; }
+
+.tBtn {
+  pointer-events: auto;
+  display: grid; place-items: center;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 12px;
+  background: rgba(8, 20, 30, 0.5);
+  border: 1px solid rgba(95, 251, 241, 0.35);
+  color: rgba(200, 250, 255, 0.9);
+  font-size: 10px; letter-spacing: 0.14em;
+  text-shadow: 0 0 6px rgba(95, 251, 241, 0.4);
+  backdrop-filter: blur(2px);
+  touch-action: none;
+}
+.tBtn span { pointer-events: none; }
+.tBtn.active {
+  background: rgba(95, 251, 241, 0.28);
+  border-color: var(--cyan);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(95, 251, 241, 0.35);
+}
+
+.tPad { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom)); pointer-events: none; }
+.tPadLeft {
+  left: calc(14px + env(safe-area-inset-left));
+  display: flex; flex-direction: column; gap: 10px;
+}
+.tPadRight {
+  right: calc(14px + env(safe-area-inset-right));
+  display: flex; flex-direction: row; align-items: flex-end; gap: 10px;
+}
+.tCol { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.tSteerRow { display: flex; gap: 10px; }
+
+.tSteer { width: 78px; height: 78px; font-size: 20px; }
+.tBrake, .tDrift { width: 78px; height: 44px; }
+.tDrift { border-color: rgba(255, 179, 71, 0.45); color: #ffe8c0; }
+.tDrift.active { background: rgba(255, 179, 71, 0.28); border-color: var(--amber); box-shadow: 0 0 16px rgba(255, 179, 71, 0.3); }
+
+.tFire {
+  width: 92px; height: 92px; font-size: 12px;
+  color: #ffd9d9; border-color: rgba(255, 69, 93, 0.5);
+}
+.tFire.active {
+  background: rgba(255, 69, 93, 0.32);
+  border-color: var(--red);
+  box-shadow: 0 0 18px rgba(255, 69, 93, 0.4);
+}
+.tJump, .tBoost { width: 92px; height: 56px; }
+.tSwap { width: 92px; height: 36px; font-size: 9px; }
+
+.tPause {
+  position: absolute;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: 48px; height: 42px; font-size: 13px;
+}
+
+#rotateHint {
+  display: none;
+  position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 26; pointer-events: none;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em;
+  color: rgba(200, 245, 255, 0.8);
+  background: rgba(6, 12, 20, 0.7);
+  border: 1px solid rgba(95, 251, 241, 0.3);
+  padding: 8px 16px;
+  animation: blink 2.4s ease-in-out infinite;
+}
+@media (orientation: portrait) {
+  body.touch #rotateHint { display: block; }
+}
+
+/* short screens (phone landscape): keep the menu to title + START, no scroll hunt */
+@media (max-height: 560px) {
+  .menuInner { overflow: hidden; scrollbar-width: none; }
+  .menuInner::-webkit-scrollbar { display: none; }
+  .menuBody { display: flex; flex-direction: column; }
+  .launchCard { order: -1; }
+  .controlCard, .lede, .menuFeatures { display: none; }
+  .menuFoot { display: none; }
+  .launchCard { margin-top: 6px; }
+}

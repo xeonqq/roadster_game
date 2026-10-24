@@ -2,8 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#05070f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <title>NEON OVERDRIVE — Free Cyberpunk Car Chase Game in Your Browser</title>
   <meta name="description" content="Steal a Tesla Roadster 2 and outrun the SFPD through Neo San Francisco 2088. Drift, boost and jump over blockades, grab 4 data cores and escape by boat — free browser game, no install." />
@@ -278,6 +281,31 @@
         <div class="bestLine small">PERSONAL BEST <b id="finalBest">0</b></div>
       </div>
     </div>
+
+    <div id="touchUI">
+      <div class="tPad tPadLeft">
+        <div class="tSteerRow">
+          <div class="tBtn tBrake" data-key="KeyS"><span>BRAKE</span></div>
+          <div class="tBtn tDrift" data-key="KeyK"><span>DRIFT</span></div>
+        </div>
+        <div class="tSteerRow">
+          <div class="tBtn tSteer" data-key="KeyA"><span>◀</span></div>
+          <div class="tBtn tSteer" data-key="KeyD"><span>▶</span></div>
+        </div>
+      </div>
+      <div class="tPad tPadRight">
+        <div class="tCol">
+          <div class="tBtn tSwap" data-key="KeyQ"><span>SWAP</span></div>
+          <div class="tBtn tBoost" data-key="ShiftLeft"><span>BOOST</span></div>
+        </div>
+        <div class="tCol">
+          <div class="tBtn tJump" data-key="Space"><span>JUMP</span></div>
+          <div class="tBtn tFire" data-key="KeyJ"><span>FIRE</span></div>
+        </div>
+      </div>
+      <div class="tBtn tPause" data-key="Escape"><span>II</span></div>
+    </div>
+    <div id="rotateHint">↻ ROTATE TO LANDSCAPE FOR THE FULL CHASE</div>
 
     <div id="loading" class="loading">
       <div class="loadTitle">NEON OVERDRIVE</div>

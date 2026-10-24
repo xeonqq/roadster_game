@@ -196,7 +196,8 @@ export class Player {
       return;
     }
 
-    const throttle = input.isDown('forward') ? 1 : 0;
+    // touch mode drives with an always-on throttle; S/back (or BRAKE button) cuts it
+    const throttle = (input.isDown('forward') || (input.autoThrottle && !input.isDown('back'))) ? 1 : 0;
     const brake = input.isDown('back') ? 1 : 0;
     const steerTarget = (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0);
     // smooth digital steering so taps don't snap the car sideways

@@ -4,9 +4,11 @@ import { Game } from './game.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
 import { HUD } from './hud.js';
+import { initTouch } from './touch.js';
 
 const canvas = document.getElementById('scene');
 const input = new Input(canvas);
+initTouch(input);
 const audio = new AudioEngine();
 const hud = new HUD();
 const world = new World(2088);

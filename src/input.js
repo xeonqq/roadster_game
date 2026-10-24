@@ -23,6 +23,8 @@ export class Input {
     this.released = new Set();
     this.mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2, down: false, justDown: false, justUp: false, wheel: 0 };
     this.anyKeyPressed = false;
+    // set by the touch layer: phones drive with an always-on throttle + brake button
+    this.autoThrottle = false;
     this._bind();
   }
 
@@ -71,6 +73,19 @@ export class Input {
     if (!codes) return false;
     for (const c of codes) if (this.down.has(c)) return true;
     return false;
+  }
+
+  // on-screen touch buttons inject the same key codes the bindings already use,
+  // so gameplay code never has to know the difference
+  setVirtual(code, active) {
+    if (active) {
+      if (!this.down.has(code)) this.pressed.add(code);
+      this.down.add(code);
+      this.anyKeyPressed = true;
+    } else {
+      if (this.down.has(code)) this.released.add(code);
+      this.down.delete(code);
+    }
   }
 
   wasPressed(action) {
