@@ -1,4 +1,4 @@
-import { BLOCK, ROAD, COP } from './config.js';
+import { BLOCK, ROAD, COP, EXHAUST } from './config.js';
 import {
   clamp, dist, angleDiff, turnToward, damp, resolveCircleRect, TAU,
 } from './utils.js';
@@ -200,7 +200,7 @@ export class PoliceForce {
       navTimer: 0, direct: false,
       stuck: 0, lastX: point.x, lastY: point.y,
       stun: 0, hitFlash: 0, phase: rand(0, 6),
-      boostGlow: 0, sirenPhase: rand(0, TAU),
+      sirenPhase: rand(0, TAU),
       spawnGrace: 1.2,
     };
     this.cops.push(cop);
@@ -281,6 +281,17 @@ export class PoliceForce {
 
     cop.vx = damp(cop.vx, ax, 3.6, dt);
     cop.vy = damp(cop.vy, ay, 3.6, dt);
+
+    // exhaust wash: the suspect's gas plume shoves ground units back out of
+    // the cloud — drones fly above it, heavies resist a little (mass)
+    if (player.gasIntensity > 0 && !def.flying && d < EXHAUST.pushRadius) {
+      const falloff = 1 - d / EXHAUST.pushRadius;
+      const push = EXHAUST.pushForce * player.gasIntensity * falloff * falloff * (2.6 / def.radius) * dt;
+      cop.vx -= (dx / (d || 1)) * push;
+      cop.vy -= (dy / (d || 1)) * push;
+      if (falloff > 0.5 && chance(dt * 7)) game.fx.smoke(cop.x, cop.y, 0.5, 1, EXHAUST.color, 0.8);
+    }
+
     cop.x += cop.vx * dt;
     cop.y += cop.vy * dt;
 
@@ -349,9 +360,6 @@ export class PoliceForce {
         // player can trade paint
         if (rel > 24) this.damageCop(cop, rel * 0.55, game);
       }
-      cop.boostGlow = 1;
-    } else {
-      cop.boostGlow = Math.max(0, cop.boostGlow - dt * 3);
     }
   }
 
@@ -483,7 +491,7 @@ export class PoliceForce {
       navX: Math.round(x / BLOCK) * BLOCK, navY: Math.round(y / BLOCK) * BLOCK,
       prevX: 1e9, prevY: 1e9, navTimer: 0, direct: false,
       stuck: 0, lastX: x, lastY: y, stun: 0, hitFlash: 0,
-      phase: rand(0, 6), boostGlow: 0, sirenPhase: rand(0, TAU),
+      phase: rand(0, 6), sirenPhase: rand(0, TAU),
       spawnGrace: 0.6,
     };
     this.cops.push(cop);

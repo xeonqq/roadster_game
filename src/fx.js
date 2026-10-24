@@ -1,4 +1,5 @@
 import { clamp, randRange, TAU } from './utils.js';
+import { EXHAUST } from './config.js';
 
 const MAX_PARTICLES = 900;
 const MAX_SKIDS = 700;
@@ -117,6 +118,30 @@ export class FX {
         vz: 1 + Math.random() * 2,
         life: 0.5 + Math.random() * 0.5, maxLife: 1,
         size: (2.2 + Math.random() * 2.2) * intensity, color: '#cfe0ea', drag: 1.2, grow: 7,
+      });
+    }
+  }
+
+  // gas plume blown out the back of the roadster; power 0.4 idle-ish … 1.6 boost
+  exhaust(x, y, heading, power = 1) {
+    const bx = Math.cos(heading), by = Math.sin(heading);
+    this.add({
+      type: 'smoke',
+      x: x + (Math.random() - 0.5) * 0.7, y: y + (Math.random() - 0.5) * 0.7,
+      z: 0.25 + Math.random() * 0.3,
+      vx: -bx * (4 + Math.random() * 5) * power + (Math.random() - 0.5) * 2.5,
+      vy: -by * (4 + Math.random() * 5) * power + (Math.random() - 0.5) * 2.5,
+      vz: 0.8 + Math.random() * 1.6,
+      life: (0.45 + Math.random() * 0.4) * (0.8 + power * 0.4), maxLife: 1.2,
+      size: (1.8 + Math.random() * 2.2) * (0.7 + power * 0.6),
+      color: EXHAUST.color, drag: 1.8, grow: 4 + 5 * power,
+    });
+    if (power >= 1 && Math.random() < 0.35) {
+      this.add({
+        type: 'jet', x, y, z: 0.35,
+        vx: -bx * (9 + Math.random() * 8), vy: -by * (9 + Math.random() * 8), vz: 0.5,
+        life: 0.12 + Math.random() * 0.12, maxLife: 0.25,
+        size: 1.2 + Math.random() * 1.4, color: '#bfffe9', drag: 2,
       });
     }
   }

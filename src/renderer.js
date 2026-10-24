@@ -2660,7 +2660,6 @@ export class Renderer {
         ? { body: '#1a2230', shine: '#39465b', trim: '#05080d', glass: '#0a1520', glow: '#ff3344', tail: '#e01a2f' }
         : { body: '#e5ecf7', shine: '#ffffff', trim: '#0a0f17', glass: '#0a1520', glow: '#ff3344', tail: '#e01a2f' },
       kind: 'cop', phase: cop.phase, heavy,
-      boosting: cop.boostGlow > 0.3, boostIntensity: cop.boostGlow,
     });
     if (cop.hitFlash > 0) {
       const s = this.worldToScreen(cop.x, cop.y, 1);

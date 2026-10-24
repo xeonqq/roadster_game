@@ -9,6 +9,18 @@ export const JUMP_COST = 26;
 export const BOOST_DRAIN = 27; // per second
 export const BOOST_MIN = 6;
 
+// exhaust gas — throttle/boost/flip billow gas that shoves nearby ground units
+export const EXHAUST = {
+  color: '#9fe8d8',
+  rate: 8,           // puffs per second at plain throttle
+  boostRate: 44,     // puffs per second while boosting
+  flipRate: 30,      // puffs per second mid-flip
+  throttleGas: 0.15, // push intensity at plain throttle
+  flipGas: 0.9,      // push intensity mid-flip
+  pushRadius: 18,    // world units the gas wash reaches
+  pushForce: 750,    // shove acceleration at point blank (scaled by intensity)
+};
+
 export const PLAYER = {
   width: 2.15,
   length: 4.7,

@@ -1,4 +1,4 @@
-import { PLAYER, TURBO_MAX, JUMP_COST, BOOST_DRAIN, BOOST_MIN, WEAPONS, WEAPON_ORDER } from './config.js';
+import { PLAYER, TURBO_MAX, JUMP_COST, BOOST_DRAIN, BOOST_MIN, EXHAUST, WEAPONS, WEAPON_ORDER } from './config.js';
 import { clamp, damp, dist, lerp, TAU } from './utils.js';
 
 export class Player {
@@ -60,6 +60,8 @@ export class Player {
     this.dead = false;
     this.deathTimer = 0;
     this.engineHeat = 0;
+    this.exhaustAcc = 0;
+    this.gasIntensity = 0;
   }
 
   get speedKmh() { return Math.abs(this.forwardSpeed) * 3.6; }
@@ -184,6 +186,7 @@ export class Player {
 
     if (this.dead) {
       this.deathTimer += dt;
+      this.gasIntensity = 0;
       this.vx *= Math.exp(-2.2 * dt);
       this.vy *= Math.exp(-2.2 * dt);
       this.x += this.vx * dt;
@@ -312,6 +315,27 @@ export class Player {
       if (game && Math.random() < dt * 2) game.addSkid(this.x, this.y, this.heading, 0.7);
     } else if (game && this.speed > 28 && Math.random() < dt * 1.2) {
       game.addSkid(this.x, this.y, this.heading, 0.2);
+    }
+
+    // ── exhaust gas: throttle billows, boost and mid-flip billow hard ──
+    // gasIntensity doubles as the shove strength the police read each frame
+    const flipping = this.airborne && this.flipAngle > 0.01 && this.flipAngle < TAU;
+    this.gasIntensity = this.boosting ? 1 : flipping ? EXHAUST.flipGas : throttle ? EXHAUST.throttleGas : 0;
+    if (game) {
+      const gasRate = this.boosting ? EXHAUST.boostRate : flipping ? EXHAUST.flipRate : throttle ? EXHAUST.rate : 0;
+      if (gasRate > 0) {
+        this.exhaustAcc += gasRate * dt;
+        while (this.exhaustAcc >= 1) {
+          this.exhaustAcc -= 1;
+          const side = Math.random() < 0.5 ? -1 : 1;
+          game.fx.exhaust(
+            this.x - fx * 2.6 + rx * 0.55 * side,
+            this.y - fy * 2.6 + ry * 0.55 * side,
+            this.heading,
+            this.boosting ? 1.6 : flipping ? 1.2 : 0.5,
+          );
+        }
+      }
     }
 
     // combo timer
