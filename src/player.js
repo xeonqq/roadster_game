@@ -1,6 +1,9 @@
 import { PLAYER, TURBO_MAX, JUMP_COST, BOOST_DRAIN, BOOST_MIN, EXHAUST, WEAPONS, WEAPON_ORDER } from './config.js';
 import { clamp, damp, dist, lerp, TAU } from './utils.js';
 
+// joystick forward deflection that engages throttle (touch deadzone is 0.22)
+const THROTTLE_AXIS = 0.25;
+
 export class Player {
   constructor() {
     this.reset(0, -2);
@@ -196,12 +199,13 @@ export class Player {
       return;
     }
 
-    // touch mode drives with an always-on throttle; S/back or pulling the
-    // joystick down cuts it. Shoving the stick through the outer band
-    // forward = boost, backward = drift.
-    const brake = input.isDown('back') || (input.axisY || 0) < -0.4 ? 1 : 0;
-    const throttle = (input.isDown('forward') || (input.autoThrottle && !brake)) ? 1 : 0;
-    const wantsBoost = input.isDown('boost') || (input.autoThrottle && (input.boostLevel || 0) === 1);
+    // touch mode: push the joystick forward to accelerate, pull it back to
+    // brake. Shoving the stick through the outer band forward = boost,
+    // backward = drift.
+    const axisY = input.axisY || 0;
+    const brake = input.isDown('back') || axisY < -0.4 ? 1 : 0;
+    const throttle = (input.isDown('forward') || axisY > THROTTLE_AXIS) ? 1 : 0;
+    const wantsBoost = input.isDown('boost') || (input.boostLevel || 0) === 1;
     // analog joystick merges with digital keys
     const steerTarget = clamp(
       (input.isDown('right') ? 1 : 0) - (input.isDown('left') ? 1 : 0) + (input.axisX || 0),
@@ -210,7 +214,7 @@ export class Player {
     // smooth digital steering so taps don't snap the car sideways
     this.steer = damp(this.steer, steerTarget, 14, dt);
     const steer = this.steer;
-    const handbrake = input.isDown('handbrake') || (input.autoThrottle && (input.driftLevel || 0) === 1);
+    const handbrake = input.isDown('handbrake') || (input.driftLevel || 0) === 1;
     this.handbraking = handbrake;
 
     // ── turbo abilities ────────────────────────────────────────────────

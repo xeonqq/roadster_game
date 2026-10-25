@@ -23,10 +23,8 @@ export class Input {
     this.released = new Set();
     this.mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2, down: false, justDown: false, justUp: false, wheel: 0 };
     this.anyKeyPressed = false;
-    // set by the touch layer: phones drive with an always-on throttle + brake button
-    this.autoThrottle = false;
     // analog joystick axes (-1..1), two-level joystick triggers, and mobile
-    // automation flags; desktop stays 0/false
+    // automation flags; desktop stays 0/false. axisY +1 = push forward.
     this.axisX = 0;
     this.axisY = 0;
     this.boostLevel = 0;

@@ -1,8 +1,8 @@
 // on-screen controls for phones/tablets. The layout is deliberately lean:
-// a two-level steering joystick on the left (X = steer, shove through the
-// resistant outer band = boost forward / drift backward, pull = brake),
-// JUMP + FIRE on the right, and a small pause button. Automated: throttle is
-// always on, hard cornering drifts automatically, and weapons auto-switch
+// a two-level steering joystick on the left (X = steer, push forward =
+// throttle, pull = brake, shove through the resistant outer band forward =
+// boost / backward = drift), JUMP + FIRE on the right, and a small pause
+// button. Hard cornering still drifts automatically and weapons auto-switch
 // when dry (pre-existing in tryFire). Buttons carry data-key attributes and
 // inject real binding codes through Input.setVirtual, so gameplay code stays
 // keyboard-agnostic.
@@ -14,7 +14,6 @@ export function initTouch(input) {
   if (!forced && !(coarse && (touchApi || mobileUa))) return null;
 
   document.body.classList.add('touch');
-  input.autoThrottle = true;
   input.autoDrive = true;
 
   // the keyboard lesson has nothing to teach here
