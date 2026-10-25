@@ -1,6 +1,6 @@
 import { BLOCK, ROAD, WEAPONS, WEAPON_ORDER, COP, BAY, MISSION } from './config.js';
 import {
-  clamp, dist, randRange, pick, chance, segmentCircle, damp, TAU, formatNum,
+  clamp, dist, randRange, pick, chance, segmentCircle, damp, lerp, TAU, formatNum,
 } from './utils.js';
 import { Player } from './player.js';
 import { PoliceForce } from './police.js';
@@ -307,7 +307,7 @@ export class Game {
         p.z = BAY.deckZ;
         p.vz = 0;
         p.airborne = false;
-        this.win();
+        this.startLaunch();
       } else {
         p.x = this.lastSafe.x;
         p.y = this.lastSafe.y;
@@ -350,6 +350,94 @@ export class Game {
     this.audio.ui();
   }
 
+  // easter egg finale: the Starship was waiting on the stern the whole time —
+  // roll in, get stowed, light the candles, and put the Roadster on Mars
+  startLaunch() {
+    if (this.state !== 'playing') return;
+    this.state = 'launching';
+    this.launchT = 0;
+    this.launchFrom = { x: this.player.x, y: this.player.y, heading: this.player.heading };
+    this.playerStowed = false;
+    this.rocketZ = 0;
+    this.rocketTilt = 0;
+    this.rocketFlame = 0;
+    this.player.vx = 0;
+    this.player.vy = 0;
+    this.player.vz = 0;
+    this.player.boosting = false;
+    this.saveBest();
+    this.slowMo = 0;
+    this.addScore(5000, 'ESCAPED');
+    this.fx.flash('#5ffbf1', 0.4, 0.6);
+    this.addShake(0.8);
+    this.hud.alert('THE ROCKET AWAITS', 'ROLL INTO THE STARSHIP // MARS WINDOW OPEN');
+    this.audio.setEngine(0, false, false);
+    this.audio.setSiren(0);
+    this.audio.ui();
+  }
+
+  updateLaunch(dt) {
+    const p = this.player;
+    const rx = BAY.rocketX, baseZ = BAY.deckZ + 9.5;
+    this.launchT += dt;
+    this.fx.update(dt);
+    this.skids.update(dt);
+    this.hud.update(this);
+    this.addShake(this.rocketFlame > 0 ? 0.22 : 0);
+
+    // phase A — the roadster rolls itself into the hatch
+    if (this.launchT < 1.15 && !this.playerStowed) {
+      const t01 = clamp(this.launchT / 1.15, 0, 1);
+      const ease = t01 * t01 * (3 - 2 * t01);
+      p.x = lerp(this.launchFrom.x, rx - 2.2, ease);
+      p.y = lerp(this.launchFrom.y, 0, ease);
+      p.z = BAY.deckZ;
+      p.heading = Math.atan2(0 - p.y, rx - p.x);
+      p.forwardSpeed = 24 * (1 - ease * 0.7);
+      p.speed = Math.abs(p.forwardSpeed);
+      if (Math.random() < dt * 22) this.fx.exhaust(p.x, p.y, p.heading, 1.2, '#9fe8d8');
+      if (t01 >= 1) {
+        this.playerStowed = true;
+        this.fx.flash('#ffffff', 0.5, 0.5);
+        this.fx.ring(rx, 0, 8, '#ffffff');
+        this.addShake(0.9);
+        this.audio.impact(1.6);
+        this.hud.toast('PAYLOAD SECURED — ONE (1) ROADSTER, BOUND FOR MARS', 'good');
+      }
+      return;
+    }
+
+    // phase B — ignition
+    if (this.launchT >= 2 && this.rocketFlame === 0) {
+      this.rocketFlame = 0.01;
+      this.fx.explosion(rx, 0, baseZ, 1.6, '#9fd8ff');
+      this.audio.explosion(false);
+      this.addShake(1.5);
+      this.hud.toast('IGNITION — OCCUPANT: ONE (1) ROADSTER', 'good');
+    }
+
+    // phase C — liftoff, camera rides the stack toward Mars
+    if (this.rocketFlame > 0) {
+      this.rocketFlame = Math.min(1, this.rocketFlame + dt * 2.4);
+      if (this.launchT > 2.4) {
+        const t = this.launchT - 2.4;
+        this.rocketZ += (8 + t * 46) * dt;
+        this.rocketTilt = Math.min(0.22, this.rocketTilt + dt * 0.055);
+        p.x = rx - this.rocketTilt * 6;
+        p.y = 0;
+        p.z = baseZ + this.rocketZ * 0.5;
+        p.heading = 0;
+        this.fx.launchFlame(rx - this.rocketTilt * 6, 0, baseZ + this.rocketZ, this.rocketFlame);
+      }
+    }
+
+    if (this.launchT > 7.4) {
+      this.state = 'over';
+      this.slowMo = 0;
+      this.hud.showGameOver(this.stats(), true, 'MARS BOUND');
+    }
+  }
+
   togglePause() {
     if (this.state === 'playing') {
       this.state = 'paused';
@@ -384,6 +472,11 @@ export class Game {
       this.fx.update(dt);
       this.skids.update(dt);
       if (this.input.wasPressed('restart') || this.input.wasPressed('start')) this.startNew();
+      return;
+    }
+
+    if (this.state === 'launching') {
+      this.updateLaunch(dt);
       return;
     }
 
@@ -475,7 +568,14 @@ export class Game {
     if (p.dead) return;
     p.wallCd = (p.wallCd || 0) - dt;
     let impact = 0;
-    this.world.collideCircle(p, 1.9, (res) => {
+    let bmwBroughtDown = false;
+    this.world.collideCircle(p, 1.9, (res, b) => {
+      // easter egg: ramming the four-cylinder HQ folds it — free of charge
+      if (b && b.special === 'bmw' && !b.collapsed) {
+        bmwBroughtDown = true;
+        this.collapseBmw(b);
+        return;
+      }
       const vn = p.vx * res.nx + p.vy * res.ny;
       if (vn < 0) {
         p.vx -= res.nx * vn * 1.35;
@@ -483,7 +583,7 @@ export class Game {
         impact = Math.max(impact, Math.abs(vn));
       }
     });
-    if (impact > 6) {
+    if (!bmwBroughtDown && impact > 6) {
       if (impact > 13) {
         this.addSkid(p.x, p.y, p.heading, 1);
         this.fx.sparks(p.x, p.y, 1, Math.min(14, impact / 3), '#ffcc66', 9);
@@ -496,6 +596,26 @@ export class Game {
         this.hud.toast('IMPACT — WATCH THE BUILDINGS', 'warn');
       }
     }
+  }
+
+  // easter egg: the Vierzylinder comes down like a folded concrete deck chair
+  collapseBmw(b) {
+    b.collapsed = true;
+    b.collapseAt = this.time;
+    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+    this.fx.explosion(cx, cy, 1.2, 2.6, '#d8dee8');
+    this.fx.landDust(cx, cy, 24);
+    for (let i = 0; i < 3; i++) {
+      const fx = b.x0 + Math.random() * (b.x1 - b.x0);
+      const fy = b.y0 + Math.random() * (b.y1 - b.y0);
+      this.fx.smoke(fx, fy, 1.5, 3, '#c8d0da', 1.6, 2);
+    }
+    this.addShake(2.2);
+    this.audio.explosion(true);
+    this.audio.impact(2);
+    this.addScore(300, 'BMW DOWN');
+    this.hud.toast('BMW HQ FOLDED — FREE OF CHARGE', 'good');
+    this.hud.toast('XIAOMI · AITO · XPENG FLAGS RAISED IN THE RUINS', 'good');
   }
 
   updateAudio(dt) {

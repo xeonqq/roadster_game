@@ -115,6 +115,10 @@ export const BAY = {
   deckZ: 1.8,
   finishX: 920,
   finishY: 0,
+  // easter egg: Starship waiting on the stern deck for a finished run
+  rocketX: 963,
+  rocketHalfW: 2.4,
+  rocketH: 30,
 };
 
 // Four city data cores have to be pulled before the boat unlocks. Their

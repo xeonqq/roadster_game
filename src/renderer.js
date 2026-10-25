@@ -279,7 +279,7 @@ export class Renderer {
         case 'ramp': this.drawRamp(it.pickup); break;
         case 'boostpad': this.drawBoostpad(it.pickup); break;
         case 'hill': this.drawHill(it.pickup); break;
-        case 'boat': this.drawBoat(); break;
+        case 'boat': this.drawBoat(game); break;
         case 'gate': this.drawGate(it.gate, game); break;
         default: break;
       }
@@ -728,7 +728,7 @@ export class Renderer {
     for (const heli of game.police.helicopters) items.push({ kind: 'heli', heli, depth: this.depthKey(heli.x, heli.y) + 0.4 });
 
     const p = game.player;
-    if (game.state !== 'menu' || true) {
+    if (!game.playerStowed) {
       items.push({ kind: 'player', depth: this.depthKey(p.x, p.y) + 0.35 });
     }
     return items;
@@ -738,6 +738,8 @@ export class Renderer {
   drawBuilding(b, game) {
     const ctx = this.ctx;
     const z = this.cam.zoom;
+    if (b.collapsed) return this.drawBmwRuin(b, game);
+    if (b.style === 'cyl') return this.drawCylTower(b, game);
     const hpx = b.h * this.zScale;
     const A = this.worldToScreen(b.x0, b.y0);
     const B = this.worldToScreen(b.x1, b.y0);
@@ -3393,7 +3395,155 @@ export class Renderer {
     ctx.restore();
   }
 
-  drawBoat() {
+  // easter egg: the BMW four-cylinder HQ — four barrels of Bavarian pride
+  drawCylTower(b, game) {
+    const ctx = this.ctx;
+    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+    const hpx = b.h * this.zScale;
+    const halfW = Math.abs(this.worldToScreen(b.x1, cy).x - this.worldToScreen(cx, cy).x);
+    const base = this.worldToScreen(cx, cy);
+    const ghost = this.occludesPlayer(b, game);
+    ctx.save();
+    ctx.globalAlpha = ghost ? 0.16 : 1;
+
+    // ground shadow
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = '#02030a';
+    ctx.beginPath();
+    ctx.ellipse(base.x + 7, base.y + 7, halfW * 1.15, halfW * 0.6, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    // the four cylinders
+    const cylW = halfW * 0.62;
+    for (let i = 0; i < 4; i++) {
+      const off = -halfW * 0.75 + i * halfW * 0.5;
+      const x = base.x + off;
+      const g = ctx.createLinearGradient(x - cylW / 2, 0, x + cylW / 2, 0);
+      g.addColorStop(0, '#aeb9c6');
+      g.addColorStop(0.35, '#eef3f8');
+      g.addColorStop(1, '#8b98a8');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x - cylW / 2, base.y);
+      ctx.lineTo(x - cylW / 2, base.y - hpx);
+      ctx.arc(x, base.y - hpx, cylW / 2, Math.PI, 0);
+      ctx.lineTo(x + cylW / 2, base.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(40,55,75,0.5)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    // shared cap
+    ctx.fillStyle = 'rgba(24,32,44,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(base.x, base.y - hpx, halfW * 0.95, halfW * 0.32, 0, 0, TAU);
+    ctx.fill();
+
+    // roundel
+    const rr = halfW * 0.42;
+    const rc = this.worldToScreen(cx, cy, b.h * 0.86);
+    ctx.save();
+    ctx.translate(rc.x, rc.y);
+    ctx.fillStyle = '#e9eef5';
+    ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#2f6df6';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, rr, -Math.PI / 2, 0); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, rr, Math.PI / 2, Math.PI); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(20,30,45,0.85)';
+    ctx.lineWidth = Math.max(1, rr * 0.16);
+    ctx.beginPath(); ctx.arc(0, 0, rr, 0, TAU); ctx.stroke();
+    ctx.fillStyle = 'rgba(15,22,32,0.9)';
+    ctx.font = `700 ${Math.max(7, rr * 0.42)}px ${FONT_MONO}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('BMW', 0, -rr - 5);
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // and the ruin it leaves behind: rubble + rival EV flags on poles
+  drawBmwRuin(b, game) {
+    const ctx = this.ctx;
+    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+    const t = game ? clamp((game.time - b.collapseAt) / 1.7, 0, 1) : 1;
+
+    // sinking animation
+    if (t < 1) {
+      const ease = t * t;
+      const hpx = b.h * this.zScale * (1 - ease * 0.96);
+      const base = this.worldToScreen(cx, cy);
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#6d7886';
+      ctx.beginPath();
+      ctx.ellipse(base.x, base.y - hpx * 0.4, (b.x1 - b.x0) * this.cam.zoom * 0.55, hpx * 0.34, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      if (game && Math.random() < 0.4) {
+        game.fx.smoke(b.x0 + Math.random() * (b.x1 - b.x0), b.y0 + Math.random() * (b.y1 - b.y0), 1, 1, '#a8b2be', 1.4, 2);
+      }
+      return;
+    }
+
+    // rubble field
+    const A = this.worldToScreen(b.x0, b.y0);
+    const B = this.worldToScreen(b.x1, b.y1);
+    const w = Math.abs(B.x - A.x), hpx2 = Math.abs(B.y - A.y);
+    ctx.save();
+    ctx.fillStyle = '#3a4250';
+    ctx.beginPath();
+    ctx.ellipse((A.x + B.x) / 2, (A.y + B.y) / 2 + hpx2 * 0.2, w * 0.44, hpx2 * 0.34, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#4d5766';
+    for (let i = 0; i < 9; i++) {
+      const rx = (A.x + B.x) / 2 + Math.sin(i * 37.7) * w * 0.3;
+      const ry = (A.y + B.y) / 2 + Math.cos(i * 21.3) * hpx2 * 0.22;
+      const rs = 3 + (i * 7) % 6;
+      ctx.beginPath();
+      ctx.moveTo(rx - rs, ry + rs * 0.4);
+      ctx.lineTo(rx, ry - rs * 0.6);
+      ctx.lineTo(rx + rs, ry + rs * 0.3);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // the victors' flags: Xiaomi, AITO, XPeng
+    const brands = [
+      { name: 'XIAOMI', color: '#ff6900', glyph: 'MI', fx: 16, fy: cy - 24 },
+      { name: 'AITO', color: '#d3222a', glyph: 'AITO', fx: -32, fy: cy },
+      { name: 'XPENG', color: '#1f5fd0', glyph: 'X', fx: 26, fy: cy + 24 },
+    ];
+    const poleTop = 6.5;
+    for (const br of brands) {
+      const foot = this.worldToScreen(cx + br.fx, br.fy);
+      const px = foot.x, py = foot.y;
+      const ph = poleTop * this.zScale;
+      ctx.strokeStyle = 'rgba(210,220,230,0.9)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - ph); ctx.stroke();
+      const wave = Math.sin(this.time * 2.6 + br.fy) * 3;
+      ctx.fillStyle = br.color;
+      ctx.beginPath();
+      ctx.moveTo(px, py - ph);
+      ctx.quadraticCurveTo(px + 16, py - ph - 2 + wave, px + 30, py - ph + wave);
+      ctx.lineTo(px + 30, py - ph + 12 + wave);
+      ctx.quadraticCurveTo(px + 16, py - ph + 10 + wave, px, py - ph + 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.font = `700 7px ${FONT_MONO}`;
+      ctx.textAlign = 'left';
+      ctx.fillText(br.glyph, px + 5, py - ph + 8 + wave);
+    }
+    if (Math.random() < 0.06 && game) {
+      game.fx.smoke(cx + (Math.random() - 0.5) * (b.x1 - b.x0), cy + (Math.random() - 0.5) * (b.y1 - b.y0), 0.8, 1, '#8b93a0', 1, 2.4);
+    }
+  }
+
+  drawBoat(game) {
     const ctx = this.ctx;
     const x0 = BAY.boatX0, x1 = BAY.boatX1;
     const hy = BAY.boatHalfY, dz = BAY.deckZ;
@@ -3517,7 +3667,108 @@ export class Renderer {
       ctx.fillStyle = 'rgba(255,180,71,0.95)';
       ctx.beginPath(); ctx.arc(light.x, light.y, 2.5, 0, TAU); ctx.fill();
     }
+    // easter egg: the Starship parked on the bridge roof once the heist is done
+    if (game && game.missionReady) this.drawStarship(game);
     ctx.restore();
+  }
+
+  drawStarship(game) {
+    const ctx = this.ctx;
+    const p = (x, y, z) => this.worldToScreen(x, y, z);
+    const rx = BAY.rocketX;
+    const baseZ = BAY.deckZ + 9.5 + game.rocketZ;
+    const H = BAY.rocketH;
+    const tilt = game.rocketTilt || 0;
+
+    // ground/fire wash under the engines while lit
+    if (game.rocketFlame > 0) {
+      const wash = p(rx, 0, Math.max(0, baseZ - 14 - game.rocketZ));
+      const r = (30 + Math.random() * 14) * this.cam.zoom * 0.5 * game.rocketFlame;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(wash.x, wash.y, 0, wash.x, wash.y, r);
+      g.addColorStop(0, `rgba(160,230,255,${0.5 * game.rocketFlame})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(wash.x, wash.y, r, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+
+    const bottom = p(rx, 0, baseZ);
+    const top = p(rx + tilt * H, 0, baseZ + H);
+    const w = Math.max(3, BAY.rocketHalfW * 2 * this.cam.zoom);
+    const lean = (top.x - bottom.x);
+
+    ctx.save();
+    // engine skirt (dark band)
+    ctx.fillStyle = '#1a2028';
+    ctx.fillRect(bottom.x - w / 2, bottom.y - 7 * this.cam.zoom * 0.55, w, 7 * this.cam.zoom * 0.55);
+    // hull
+    const grd = ctx.createLinearGradient(bottom.x - w / 2, 0, bottom.x + w / 2, 0);
+    grd.addColorStop(0, '#9aa6b5');
+    grd.addColorStop(0.38, '#f2f6fa');
+    grd.addColorStop(1, '#78859a');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.moveTo(bottom.x - w / 2, bottom.y - 4);
+    ctx.lineTo(bottom.x + lean - w * 0.62, top.y + w);
+    ctx.quadraticCurveTo(bottom.x + lean, top.y - w * 1.5, bottom.x + lean + w * 0.62, top.y + w);
+    ctx.lineTo(bottom.x + w / 2, bottom.y - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(30,40,55,0.8)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // forward fins
+    ctx.fillStyle = '#8c96a5';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(bottom.x + lean * 0.55 + s * w * 0.5, bottom.y - (H * 0.42) * this.zScale);
+      ctx.lineTo(bottom.x + lean * 0.75 + s * (w * 0.5 + w * 1.7), bottom.y - (H * 0.52) * this.zScale);
+      ctx.lineTo(bottom.x + lean * 0.7 + s * w * 0.5, bottom.y - (H * 0.6) * this.zScale);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // nose cone
+    ctx.fillStyle = '#232b36';
+    ctx.beginPath();
+    ctx.moveTo(bottom.x + lean - w * 0.62, top.y + w);
+    ctx.quadraticCurveTo(bottom.x + lean, top.y - w * 1.5, bottom.x + lean + w * 0.62, top.y + w);
+    ctx.closePath();
+    ctx.fill();
+    // livery
+    ctx.fillStyle = 'rgba(20,28,40,0.85)';
+    ctx.font = `700 ${Math.max(6, w * 0.34)}px ${FONT_MONO}`;
+    ctx.textAlign = 'center';
+    ctx.fillText('SPACEX', bottom.x + lean * 0.5, bottom.y - (H * 0.3) * this.zScale);
+    // blinking nav strobe
+    const blink = (Math.sin(this.time * 4) + 1) / 2;
+    ctx.fillStyle = `rgba(255,90,90,${0.4 + blink * 0.6})`;
+    ctx.beginPath();
+    ctx.arc(bottom.x + lean, top.y - w * 1.2, 1.8, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    // Mars appears in the sky once the stack is climbing
+    if (game.rocketZ > 20) {
+      const a = clamp((game.rocketZ - 20) / 60, 0, 0.9);
+      const mx = this.width * 0.82, my = this.height * 0.16;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const mg = ctx.createRadialGradient(mx, my, 0, mx, my, 26);
+      mg.addColorStop(0, `rgba(255,110,70,${a})`);
+      mg.addColorStop(0.5, `rgba(255,110,70,${a * 0.35})`);
+      mg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = mg;
+      ctx.beginPath(); ctx.arc(mx, my, 26, 0, TAU); ctx.fill();
+      ctx.fillStyle = `rgba(255,140,100,${a})`;
+      ctx.beginPath(); ctx.arc(mx, my, 9, 0, TAU); ctx.fill();
+      ctx.font = `600 8px ${FONT_MONO}`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(255,170,140,${a})`;
+      ctx.fillText('MARS // 78,300,000 KM', mx, my + 24);
+      ctx.restore();
+    }
   }
 
   drawBoatBox(x0, y0, x1, y1, z0, z1, color) {

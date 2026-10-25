@@ -177,6 +177,40 @@ export class FX {
     this.rings.push({ x, y, z: 0.1, r: 1, grow: 20 + impact, life: 0.4, maxLife: 0.4, color: '#8fd8e8', width: 2 });
   }
 
+  // Starship liftoff wash: a violent column of fire, smoke and debris blast
+  launchFlame(x, y, z, intensity = 1) {
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * TAU;
+      const v = (5 + Math.random() * 16) * intensity;
+      this.add({
+        type: 'fire', x: x + (Math.random() - 0.5) * 2.4, y: y + (Math.random() - 0.5) * 2.4, z: z - Math.random() * 1.5,
+        vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: -14 - Math.random() * 22,
+        life: 0.2 + Math.random() * 0.3, maxLife: 0.5,
+        size: (3 + Math.random() * 5) * intensity,
+        color: Math.random() < 0.5 ? '#fff0b0' : '#8fd8ff', drag: 0.6, grow: 5,
+      });
+    }
+    if (Math.random() < 0.5) {
+      const a = Math.random() * TAU;
+      const v = 3 + Math.random() * 9;
+      this.add({
+        type: 'smoke', x, y, z: z - 1,
+        vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: -2 - Math.random() * 4,
+        life: 0.8 + Math.random() * 1.2, maxLife: 2,
+        size: 4 + Math.random() * 6, color: '#c8d4dc', drag: 0.8, grow: 10,
+      });
+    }
+    if (Math.random() < 0.3) {
+      const a = Math.random() * TAU;
+      this.add({
+        type: 'spark', x, y, z: z - 0.5,
+        vx: Math.cos(a) * (18 + Math.random() * 20), vy: Math.sin(a) * (18 + Math.random() * 20), vz: -6,
+        life: 0.3 + Math.random() * 0.4, maxLife: 0.7,
+        size: 2 + Math.random() * 2, color: '#ffd58a', grav: 18, drag: 0.4,
+      });
+    }
+  }
+
   ring(x, y, radius, color = '#8ffcff', life = 0.5) {
     this.rings.push({ x, y, z: 0.08, r: 0.5, grow: radius * 2.2, life, maxLife: life, color, width: 2.5 });
   }

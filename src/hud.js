@@ -140,11 +140,14 @@ export class HUD {
     }
   }
 
-  showGameOver(stats, won = false) {
+  showGameOver(stats, won = false, title = null) {
     this.showHUD(false);
     this.refs.gameover.classList.remove('hidden');
     this.refs.gameover.classList.toggle('victory', won);
-    if (won) {
+    if (title) {
+      this.refs.overEyebrow.textContent = 'STARSHIP DEPARTED OAKLAND // NEXT STOP: MARS';
+      this.refs.overTitle.textContent = title;
+    } else if (won) {
       this.refs.overEyebrow.textContent = 'ESCAPE CONFIRMED // BAY REACHED';
       this.refs.overTitle.textContent = 'ESCAPED';
     } else {

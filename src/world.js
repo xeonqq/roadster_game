@@ -139,6 +139,17 @@ export class World {
       });
       b.sign = { text: 'NEXUS', color: '#ff2fb9', type: 'billboard', side: 'right' };
       block.buildings.push(b);
+    } else if (bx === 1 && by === 1) {
+      // easter egg: the four-cylinder HQ. Crash it and rival EV flags rise.
+      block.type = 'landmark';
+      block.landmark = 'bmw';
+      const b = makeBuilding(rng, lot.x0 + 10, lot.y0 + 10, lot.x1 - 10, lot.y1 - 10, {
+        height: 98, style: 'cyl', noSign: true,
+        baseColor: '#e6ecf4', accent: '#2f6df6',
+      });
+      b.name = 'BMW VIERZYLINDER HQ';
+      b.special = 'bmw';
+      block.buildings.push(b);
     } else {
       // ordinary city block ------------------------------------------------
       let type = pickWeighted(rng, BLOCK_TYPES);
@@ -340,6 +351,7 @@ export class World {
     const list = this.buildingsNear(pos.x, pos.y, radius + 2);
     let hit = null;
     for (const b of list) {
+      if (b.collapsed) continue; // collapsed buildings are passable rubble
       const res = resolveCircleRect(pos.x, pos.y, radius, b.x0, b.y0, b.x1, b.y1);
       if (res) {
         pos.x = res.x;
