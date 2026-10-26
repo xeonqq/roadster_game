@@ -4,6 +4,10 @@ A 2.5D cyberpunk escape game set in San Francisco, 2088. You are driving a stole
 
 Built with plain **HTML5 Canvas 2D + ES modules**. No frameworks, no build step, no external assets — all city geometry, cars, effects, UI and audio are generated in code.
 
+## Play online
+
+**https://roadster-game.xeonqq.workers.dev/**
+
 ## Run
 
 ```bash
